@@ -93,13 +93,6 @@ export default function TorrentClient() {
           // Initialize WebTorrent client with options
           clientRef.current = new window.WebTorrent({
             maxConns: 55, // Maximum number of connections per torrent
-            tracker: {
-              announce: [
-                "wss://tracker.btorrent.xyz",
-                "wss://tracker.openwebtorrent.com",
-                "wss://tracker.fastcast.nz",
-              ],
-            },
           });
 
           clientRef.current.on("error", (err: Error) => {
@@ -216,19 +209,12 @@ export default function TorrentClient() {
       setError(
         "Torrent addition timed out. The torrent might be invalid or have no peers."
       );
-    }, 30000); // 30 second timeout
+    }, 60000); // 30 second timeout
 
     console.log("adding torrent...");
 
     try {
-      const torrent = clientRef.current.add(torrentId, {
-        announce: [
-          "wss://tracker.btorrent.xyz",
-          "wss://tracker.openwebtorrent.com",
-          "wss://tracker.fastcast.nz",
-          "wss://tracker.webtorrent.io",
-        ],
-      });
+      const torrent = clientRef.current.add(torrentId);
 
       console.log("Torrent object created:", torrent);
 
