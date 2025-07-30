@@ -16,6 +16,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader,
+  Download,
 } from "lucide-react";
 import TorrentUpload from "@/components/torrent-upload";
 import TorrentDetails from "@/components/torrent-details";
@@ -67,6 +68,9 @@ export default function TorrentClient() {
   const [error, setError] = useState<string | null>(null);
   const [webTorrentSupported, setWebTorrentSupported] = useState(false);
   const [webTorrentLoaded, setWebTorrentLoaded] = useState(false);
+  const [completedTorrents, setCompletedTorrents] = useState<Set<string>>(
+    new Set()
+  );
   const clientRef = useRef<any>(null);
   const [isTorrentLoading, setIsTorrentLoading] = useState<boolean>(false);
   const updateIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -166,6 +170,35 @@ export default function TorrentClient() {
     return `${minutes}m ${secs}s`;
   };
 
+  const downloadFile = (file: any, filename: string) => {
+    try {
+      file.getBlobURL((err: Error, url: string) => {
+        if (err) {
+          console.error("Error getting blob URL:", err);
+          return;
+        }
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // Clean up the blob URL
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      });
+    } catch (error) {
+      console.error("Error downloading file:", error);
+    }
+  };
+
+  const downloadAllFiles = (torrent: any) => {
+    torrent.files.forEach((file: any) => {
+      downloadFile(file, file.name);
+    });
+  };
+
   const addTorrent = async (torrentId: string | File) => {
     console.log("inside addTorrent");
     if (!clientRef.current) {
@@ -218,15 +251,15 @@ export default function TorrentClient() {
             type: getFileType(file.name),
             webTorrentFile: file,
           })),
-          progress: torrent.progress,
-          downloadSpeed: torrent.downloadSpeed,
-          uploadSpeed: torrent.uploadSpeed,
-          downloaded: torrent.downloaded,
-          uploaded: torrent.uploaded,
-          numPeers: torrent.numPeers,
-          timeRemaining: torrent.timeRemaining,
-          ready: torrent.ready,
-          done: torrent.done,
+          progress: torrent.progress || 0,
+          downloadSpeed: torrent.downloadSpeed || 0,
+          uploadSpeed: torrent.uploadSpeed || 0,
+          downloaded: torrent.downloaded || 0,
+          uploaded: torrent.uploaded || 0,
+          numPeers: torrent.numPeers || 0,
+          timeRemaining: torrent.timeRemaining || 0,
+          ready: torrent.ready || false,
+          done: torrent.done || false,
           paused: false,
           webTorrentInstance: torrent,
         };
@@ -241,15 +274,15 @@ export default function TorrentClient() {
         const updateInterval = setInterval(() => {
           const updatedInfo: TorrentInfo = {
             ...torrentInfo,
-            progress: torrent.progress,
-            downloadSpeed: torrent.downloadSpeed,
-            uploadSpeed: torrent.uploadSpeed,
-            downloaded: torrent.downloaded,
-            uploaded: torrent.uploaded,
-            numPeers: torrent.numPeers,
-            timeRemaining: torrent.timeRemaining,
-            ready: torrent.ready,
-            done: torrent.done,
+            progress: torrent.progress || 0,
+            downloadSpeed: torrent.downloadSpeed || 0,
+            uploadSpeed: torrent.uploadSpeed || 0,
+            downloaded: torrent.downloaded || 0,
+            uploaded: torrent.uploaded || 0,
+            numPeers: torrent.numPeers || 0,
+            timeRemaining: torrent.timeRemaining || 0,
+            ready: torrent.ready || false,
+            done: torrent.done || false,
             files: torrent.files.map((file: any, index: number) => ({
               ...torrentInfo.files[index],
               progress: file.progress || 0,
@@ -259,15 +292,31 @@ export default function TorrentClient() {
             webTorrentInstance: torrent,
           };
 
+          // Update torrents list
           setTorrents((prev) =>
             prev.map((t) => (t.infoHash === torrent.infoHash ? updatedInfo : t))
           );
 
-          if (selectedTorrent?.infoHash === torrent.infoHash) {
-            setSelectedTorrent(updatedInfo);
-          }
+          // Update selected torrent if it matches
+          setSelectedTorrent((prevSelected) => {
+            if (prevSelected?.infoHash === torrent.infoHash) {
+              return updatedInfo;
+            }
+            return prevSelected;
+          });
 
-          if (torrent.done) {
+          // Check if torrent completed and handle download
+          if (torrent.done && !completedTorrents.has(torrent.infoHash)) {
+            console.log("Torrent download completed!");
+            setCompletedTorrents((prev) => new Set(prev).add(torrent.infoHash));
+
+            // Show completion notification
+            setError(null);
+
+            // Automatically download all files (optional - you can comment this out)
+            // downloadAllFiles(torrent);
+
+            // Clear the interval
             clearInterval(updateInterval);
             updateIntervalsRef.current.delete(torrent.infoHash);
           }
@@ -345,6 +394,18 @@ export default function TorrentClient() {
     }
   };
 
+  const handleDownloadFile = (file: TorrentFile) => {
+    if (file.webTorrentFile) {
+      downloadFile(file.webTorrentFile, file.name);
+    }
+  };
+
+  const handleDownloadAll = (torrent: TorrentInfo) => {
+    if (torrent.webTorrentInstance) {
+      downloadAllFiles(torrent.webTorrentInstance);
+    }
+  };
+
   if (!webTorrentLoaded) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
@@ -388,7 +449,7 @@ export default function TorrentClient() {
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">Torritory</h1>
               <p className="text-gray-400 text-xs">
-                Stream torrents directly in your browser
+                Download torrents directly in your browser.
               </p>
             </div>
             <div className="flex items-center gap-4">
@@ -489,11 +550,26 @@ export default function TorrentClient() {
                           <h3 className="text-sm font-medium text-white truncate">
                             {torrent.name}
                           </h3>
-                          <Badge
-                            variant={torrent.done ? "default" : "secondary"}
-                          >
-                            {torrent.done ? "Complete" : "Downloading"}
-                          </Badge>
+                          <div className="flex gap-2">
+                            <Badge
+                              variant={torrent.done ? "default" : "secondary"}
+                            >
+                              {torrent.done ? "Complete" : "Downloading"}
+                            </Badge>
+                            {torrent.done && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadAll(torrent);
+                                }}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <Download className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <Progress
                           value={torrent.progress * 100}
@@ -517,6 +593,7 @@ export default function TorrentClient() {
               <TorrentDetails
                 torrent={selectedTorrent}
                 onPlayFile={playFile}
+                onDownloadFile={handleDownloadFile}
                 formatBytes={formatBytes}
                 formatTime={formatTime}
               />

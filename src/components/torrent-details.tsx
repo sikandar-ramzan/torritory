@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { Card } from "@/components/ui/card";
@@ -26,6 +27,7 @@ interface TorrentFile {
   progress: number;
   downloaded: number;
   type: "video" | "audio" | "image" | "document" | "other";
+  webTorrentFile?: any;
 }
 
 interface TorrentInfo {
@@ -44,11 +46,13 @@ interface TorrentInfo {
   ready: boolean;
   done: boolean;
   paused: boolean;
+  webTorrentInstance?: any;
 }
 
 interface TorrentDetailsProps {
   torrent: TorrentInfo;
   onPlayFile: (file: TorrentFile) => void;
+  onDownloadFile: (file: TorrentFile) => void;
   formatBytes: (bytes: number) => string;
   formatTime: (seconds: number) => string;
 }
@@ -56,6 +60,7 @@ interface TorrentDetailsProps {
 export default function TorrentDetails({
   torrent,
   onPlayFile,
+  onDownloadFile,
   formatBytes,
   formatTime,
 }: TorrentDetailsProps) {
@@ -94,19 +99,41 @@ export default function TorrentDetails({
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-semibold text-white">{torrent.name}</h2>
-          <Badge variant={torrent.done ? "default" : "secondary"}>
-            {torrent.done ? "Complete" : "Downloading"}
-          </Badge>
+          <div className="flex gap-2 items-center">
+            <Badge variant={torrent.done ? "default" : "secondary"}>
+              {torrent.done ? "Complete" : "Downloading"}
+            </Badge>
+            {torrent.done && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (torrent.webTorrentInstance) {
+                    torrent.files.forEach((file) => {
+                      if (file.webTorrentFile) {
+                        onDownloadFile(file);
+                      }
+                    });
+                  }
+                }}
+                className="text-green-400 border-green-400 hover:bg-green-400/10"
+              >
+                <Download className="w-4 h-4 mr-1" />
+                Download All
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="mb-4">
           <div className="flex justify-between text-sm text-gray-400 mb-2">
-            <span>Progress: {Math.round(torrent.progress * 100)}%</span>
+            <span>Progress: {Math.round((torrent.progress || 0) * 100)}%</span>
             <span>
-              {formatBytes(torrent.downloaded)} / {formatBytes(torrent.length)}
+              {formatBytes(torrent.downloaded || 0)} /{" "}
+              {formatBytes(torrent.length || 0)}
             </span>
           </div>
-          <Progress value={torrent.progress * 100} className="h-2" />
+          <Progress value={(torrent.progress || 0) * 100} className="h-2" />
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -114,7 +141,7 @@ export default function TorrentDetails({
             <Download className="w-4 h-4 text-green-400" />
             <div>
               <div className="text-white font-medium">
-                {formatBytes(torrent.downloadSpeed)}/s
+                {formatBytes(torrent.downloadSpeed || 0)}/s
               </div>
               <div className="text-gray-400">Download</div>
             </div>
@@ -124,7 +151,7 @@ export default function TorrentDetails({
             <Upload className="w-4 h-4 text-blue-400" />
             <div>
               <div className="text-white font-medium">
-                {formatBytes(torrent.uploadSpeed)}/s
+                {formatBytes(torrent.uploadSpeed || 0)}/s
               </div>
               <div className="text-gray-400">Upload</div>
             </div>
@@ -133,7 +160,9 @@ export default function TorrentDetails({
           <div className="flex items-center gap-2 text-sm">
             <Users className="w-4 h-4 text-purple-400" />
             <div>
-              <div className="text-white font-medium">{torrent.numPeers}</div>
+              <div className="text-white font-medium">
+                {torrent.numPeers || 0}
+              </div>
               <div className="text-gray-400">Peers</div>
             </div>
           </div>
@@ -142,7 +171,7 @@ export default function TorrentDetails({
             <Clock className="w-4 h-4 text-orange-400" />
             <div>
               <div className="text-white font-medium">
-                {formatTime(torrent.timeRemaining)}
+                {formatTime(torrent.timeRemaining || 0)}
               </div>
               <div className="text-gray-400">Remaining</div>
             </div>
@@ -153,7 +182,7 @@ export default function TorrentDetails({
       <Tabs defaultValue="files" className="w-full">
         <TabsList className="grid w-full grid-cols-2 bg-gray-700/50">
           <TabsTrigger value="files">
-            Files ({torrent.files.length})
+            Files ({torrent.files?.length || 0})
           </TabsTrigger>
           <TabsTrigger value="info">Info</TabsTrigger>
         </TabsList>
@@ -161,7 +190,7 @@ export default function TorrentDetails({
         <TabsContent value="files" className="mt-4">
           <ScrollArea className="h-96">
             <div className="space-y-2">
-              {torrent.files.map((file, index) => (
+              {(torrent.files || []).map((file, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-3 rounded-lg bg-gray-700/30 hover:bg-gray-700/50 transition-colors"
@@ -175,28 +204,42 @@ export default function TorrentDetails({
                         {file.name}
                       </div>
                       <div className="text-sm text-gray-400">
-                        {formatBytes(file.length)} •{" "}
-                        {Math.round(file.progress * 100)}%
+                        {formatBytes(file.length || 0)} •{" "}
+                        {Math.round((file.progress || 0) * 100)}%
                       </div>
                       <Progress
-                        value={file.progress * 100}
+                        value={(file.progress || 0) * 100}
                         className="h-1 mt-1"
                       />
                     </div>
                   </div>
 
-                  {["video", "audio"].includes(file.type) &&
-                    file.progress > 0 && (
+                  <div className="flex gap-2 ml-2">
+                    {["video", "audio"].includes(file.type) &&
+                      (file.progress || 0) > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onPlayFile(file)}
+                          className="text-blue-400 border-blue-400 hover:bg-blue-400/10"
+                        >
+                          <Play className="w-3 h-3 mr-1" />
+                          Play
+                        </Button>
+                      )}
+
+                    {(file.progress || 0) > 0 && (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onPlayFile(file)}
-                        className="ml-2"
+                        onClick={() => onDownloadFile(file)}
+                        className="text-green-400 border-green-400 hover:bg-green-400/10"
                       >
-                        <Play className="w-3 h-3 mr-1" />
-                        Play
+                        <Download className="w-3 h-3 mr-1" />
+                        Save
                       </Button>
                     )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -229,7 +272,7 @@ export default function TorrentDetails({
                   Total Size
                 </label>
                 <div className="text-white font-medium">
-                  {formatBytes(torrent.length)}
+                  {formatBytes(torrent.length || 0)}
                 </div>
               </div>
 
@@ -238,7 +281,7 @@ export default function TorrentDetails({
                   Files
                 </label>
                 <div className="text-white font-medium">
-                  {torrent.files.length}
+                  {torrent.files?.length || 0}
                 </div>
               </div>
 
@@ -247,7 +290,7 @@ export default function TorrentDetails({
                   Downloaded
                 </label>
                 <div className="text-white font-medium">
-                  {formatBytes(torrent.downloaded)}
+                  {formatBytes(torrent.downloaded || 0)}
                 </div>
               </div>
 
@@ -256,7 +299,7 @@ export default function TorrentDetails({
                   Uploaded
                 </label>
                 <div className="text-white font-medium">
-                  {formatBytes(torrent.uploaded)}
+                  {formatBytes(torrent.uploaded || 0)}
                 </div>
               </div>
             </div>
