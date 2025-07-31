@@ -1,7 +1,6 @@
 "use client";
 
 import type React from "react";
-
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, FileText } from "lucide-react";
@@ -44,7 +43,7 @@ export default function TorrentUpload({ onFileUpload }: TorrentUploadProps) {
       if (file && file.name.endsWith(".torrent")) {
         onFileUpload(file);
       }
-      e.target.value = ""; // Reset input
+      e.target.value = "";
     },
     [onFileUpload]
   );
@@ -52,28 +51,37 @@ export default function TorrentUpload({ onFileUpload }: TorrentUploadProps) {
   return (
     <div>
       <div
-        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-xl p-4 text-center transition-all duration-200 ${
           isDragOver
-            ? "border-blue-500 bg-blue-500/10"
-            : "border-gray-600 hover:border-gray-500"
+            ? "border-emerald-500 bg-emerald-500/10 shadow-lg shadow-emerald-500/20"
+            : "border-gray-600 hover:border-gray-500 hover:bg-gray-800/30"
         }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-        <p className="text-sm text-gray-400 mb-2">
-          Drag & drop a .torrent file here
+        <Upload
+          className={`w-6 h-6 mx-auto mb-2 transition-colors ${
+            isDragOver ? "text-emerald-400" : "text-gray-400"
+          }`}
+        />
+        <p
+          className={`text-sm mb-2 transition-colors ${
+            isDragOver ? "text-emerald-300" : "text-gray-300"
+          }`}
+        >
+          Drop .torrent file here
         </p>
-        <p className="text-xs text-gray-500 mb-4">or</p>
+        <p className="text-xs text-gray-500 mb-3">or</p>
 
         <label htmlFor="torrent-file">
           <Button
             variant="outline"
-            className="cursor-pointer bg-transparent"
+            size="sm"
+            className="cursor-pointer bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white hover:border-gray-500 transition-all duration-200"
             asChild
           >
-            <span className="text-amber-100">
+            <span>
               <FileText className="w-4 h-4 mr-2" />
               Browse Files
             </span>

@@ -13,12 +13,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// export const metadata: Metadata = {
-//   title: "WebTorrent Client - Modern Torrent Streaming",
-//   description:
-//     "A modern web-based torrent client with streaming capabilities, built with Next.js and WebTorrent",
-//   keywords: "torrent, webtorrent, streaming, p2p, file sharing",
-// };
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,6 +20,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <title>Torritory - Modern WebTorrent Client</title>
+        <meta
+          name="description"
+          content="High-performance browser-based torrent client with streaming capabilities"
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

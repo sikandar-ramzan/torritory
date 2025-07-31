@@ -14,15 +14,20 @@ import {
   HardDrive,
   Link,
   AlertCircle,
-  CheckCircle2,
   Loader,
   Download,
+  Settings,
+  Activity,
+  Zap,
+  Users,
+  RefreshCw,
+  Globe,
 } from "lucide-react";
 import TorrentUpload from "@/components/torrent-upload";
 import TorrentDetails from "@/components/torrent-details";
 import MediaPlayer from "@/components/media-player";
+import TrackerService from "@/utils/trackerServcie";
 
-// Declare WebTorrent as a global variable
 declare global {
   interface Window {
     WebTorrent: any;
@@ -36,7 +41,7 @@ interface TorrentFile {
   progress: number;
   downloaded: number;
   type: "video" | "audio" | "image" | "document" | "other";
-  webTorrentFile?: any; // Reference to the actual WebTorrent file object
+  webTorrentFile?: any;
 }
 
 interface TorrentInfo {
@@ -55,7 +60,20 @@ interface TorrentInfo {
   ready: boolean;
   done: boolean;
   paused: boolean;
-  webTorrentInstance?: any; // Reference to the actual WebTorrent torrent object
+  webTorrentInstance?: any;
+}
+
+interface SpeedLimits {
+  download: number;
+  upload: number;
+}
+
+interface TrackerStats {
+  cached: boolean;
+  lastFetched: Date | null;
+  httpsCount: number;
+  wssCount: number;
+  totalCount: number;
 }
 
 export default function TorrentClient() {
@@ -71,12 +89,43 @@ export default function TorrentClient() {
   const [completedTorrents, setCompletedTorrents] = useState<Set<string>>(
     new Set()
   );
-  const clientRef = useRef<any>(null);
   const [isTorrentLoading, setIsTorrentLoading] = useState<boolean>(false);
+  const [speedLimits, setSpeedLimits] = useState<SpeedLimits>({
+    download: 0,
+    upload: 0,
+  });
+  const [showSpeedSettings, setShowSpeedSettings] = useState(false);
+  const [trackerStats, setTrackerStats] = useState<TrackerStats>({
+    cached: false,
+    lastFetched: null,
+    httpsCount: 0,
+    wssCount: 0,
+    totalCount: 0,
+  });
+  const [isRefreshingTrackers, setIsRefreshingTrackers] = useState(false);
+
+  const clientRef = useRef<any>(null);
   const updateIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const trackerService = useRef<TrackerService>(TrackerService.getInstance());
+
+  // Initialize trackers on app load
+  useEffect(() => {
+    const initializeTrackers = async () => {
+      try {
+        console.log("Initializing tracker service...");
+        await trackerService.current.getTrackers();
+        setTrackerStats(trackerService.current.getStats());
+        console.log("Tracker service initialized successfully");
+      } catch (error) {
+        console.error("Failed to initialize trackers:", error);
+        // Don't set error state here as fallback trackers will be used
+      }
+    };
+
+    initializeTrackers();
+  }, []);
 
   useEffect(() => {
-    // Load WebTorrent from CDN
     const script = document.createElement("script");
     script.src =
       "https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js";
@@ -86,13 +135,15 @@ export default function TorrentClient() {
       if (window.WebTorrent) {
         setWebTorrentLoaded(true);
 
-        // Check WebRTC support
         if (window.WebTorrent.WEBRTC_SUPPORT) {
           setWebTorrentSupported(true);
 
-          // Initialize WebTorrent client with options
           clientRef.current = new window.WebTorrent({
-            maxConns: 55, // Maximum number of connections per torrent
+            maxConns: 100,
+            downloadLimit:
+              speedLimits.download > 0 ? speedLimits.download * 1000 : -1,
+            uploadLimit:
+              speedLimits.upload > 0 ? speedLimits.upload * 1000 : -1,
           });
 
           clientRef.current.on("error", (err: Error) => {
@@ -100,6 +151,8 @@ export default function TorrentClient() {
             setError(`WebTorrent error: ${err.message}`);
             setIsTorrentLoading(false);
           });
+
+          applySpeedLimits();
         } else {
           setError("WebRTC is not supported in this browser");
         }
@@ -113,14 +166,13 @@ export default function TorrentClient() {
     document.head.appendChild(script);
 
     return () => {
-      // Clean up all update intervals
       updateIntervalsRef.current.forEach((interval) => clearInterval(interval));
       updateIntervalsRef.current.clear();
 
       if (clientRef.current) {
         clientRef.current.destroy();
       }
-      // Clean up script
+
       const existingScript = document.querySelector(
         'script[src*="webtorrent"]'
       );
@@ -130,15 +182,69 @@ export default function TorrentClient() {
     };
   }, []);
 
+  const applySpeedLimits = () => {
+    if (!clientRef.current) return;
+
+    try {
+      const downloadLimit =
+        speedLimits.download > 0 ? speedLimits.download * 1000 : -1;
+      const uploadLimit =
+        speedLimits.upload > 0 ? speedLimits.upload * 1000 : -1;
+
+      if (clientRef.current.throttleDownload) {
+        clientRef.current.throttleDownload(downloadLimit);
+        console.log(
+          `Download speed limit set to ${
+            downloadLimit === -1
+              ? "unlimited"
+              : formatBytes(downloadLimit) + "/s"
+          }`
+        );
+      }
+
+      if (clientRef.current.throttleUpload) {
+        clientRef.current.throttleUpload(uploadLimit);
+        console.log(
+          `Upload speed limit set to ${
+            uploadLimit === -1 ? "unlimited" : formatBytes(uploadLimit) + "/s"
+          }`
+        );
+      }
+    } catch (error) {
+      console.error("Failed to apply speed limits:", error);
+      setError(
+        "Failed to apply speed limits. This feature may not be supported in this WebTorrent version."
+      );
+    }
+  };
+
+  const refreshTrackers = async () => {
+    setIsRefreshingTrackers(true);
+    try {
+      console.log("Refreshing trackers...");
+      await trackerService.current.refreshTrackers();
+      setTrackerStats(trackerService.current.getStats());
+      console.log("Trackers refreshed successfully");
+    } catch (error) {
+      console.error("Failed to refresh trackers:", error);
+      setError(
+        "Failed to refresh trackers. Using cached or fallback trackers."
+      );
+    } finally {
+      setIsRefreshingTrackers(false);
+    }
+  };
+
   const getFileType = (filename: string): TorrentFile["type"] => {
     const ext = filename.split(".").pop()?.toLowerCase();
-    if (["mp4", "webm", "mkv", "avi", "mov"].includes(ext || ""))
+    if (["mp4", "webm", "mkv", "avi", "mov", "m4v", "3gp"].includes(ext || ""))
       return "video";
-    if (["mp3", "wav", "flac", "ogg", "m4a"].includes(ext || ""))
+    if (["mp3", "wav", "flac", "ogg", "m4a", "aac", "wma"].includes(ext || ""))
       return "audio";
-    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext || ""))
+    if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext || ""))
       return "image";
-    if (["pdf", "txt", "doc", "docx"].includes(ext || "")) return "document";
+    if (["pdf", "txt", "doc", "docx", "epub", "mobi"].includes(ext || ""))
+      return "document";
     return "other";
   };
 
@@ -153,14 +259,31 @@ export default function TorrentClient() {
   };
 
   const formatTime = (seconds: number): string => {
-    if (!seconds || seconds === Number.POSITIVE_INFINITY) return "∞";
+    if (!seconds || seconds === Number.POSITIVE_INFINITY || isNaN(seconds))
+      return "∞";
+    if (seconds < 60) return `${Math.floor(seconds)}s`;
+
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
+
     if (hours > 0) {
-      return `${hours}h ${minutes}m ${secs}s`;
+      return `${hours}h ${minutes}m`;
     }
     return `${minutes}m ${secs}s`;
+  };
+
+  const calculateTimeRemaining = (torrent: any): number => {
+    if (!torrent || torrent.done) return 0;
+
+    const remainingBytes = torrent.length - torrent.downloaded;
+    const downloadSpeed = torrent.downloadSpeed;
+
+    if (downloadSpeed === 0 || remainingBytes <= 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return remainingBytes / downloadSpeed;
   };
 
   const downloadFile = (file: any, filename: string) => {
@@ -178,7 +301,6 @@ export default function TorrentClient() {
         a.click();
         document.body.removeChild(a);
 
-        // Clean up the blob URL
         setTimeout(() => URL.revokeObjectURL(url), 100);
       });
     } catch (error) {
@@ -193,34 +315,40 @@ export default function TorrentClient() {
   };
 
   const addTorrent = async (torrentId: string | File) => {
-    console.log("inside addTorrent");
     if (!clientRef.current) {
       setError("WebTorrent client not initialized");
-      console.log("error: WebTorrent client not initialized");
       setIsTorrentLoading(false);
       return;
     }
 
     setError(null);
 
-    // Add timeout to stop loading if torrent doesn't start
     const timeoutId = setTimeout(() => {
       setIsTorrentLoading(false);
       setError(
-        "Torrent addition timed out. The torrent might be invalid or have no peers."
+        "Connection timeout. Please check if the torrent has active seeders or try a different torrent."
       );
-    }, 60000); // 30 second timeout
-
-    console.log("adding torrent...");
+    }, 120000);
 
     try {
-      const torrent = clientRef.current.add(torrentId);
+      let source = torrentId;
 
-      console.log("Torrent object created:", torrent);
+      if (typeof torrentId === "string") {
+        // Always append our fetched trackers to magnet URLs
+        source = await trackerService.current.appendTrackersToMagnet(torrentId);
+        console.log("Enhanced magnet URL with fresh trackers");
+      }
 
-      // Handle torrent metadata
+      const torrent = clientRef.current.add(source, {
+        strategy: "sequential",
+        maxWebConns: 4,
+        path: undefined,
+      });
+
+      console.log("Torrent added:", torrent.name || torrent.infoHash);
+
       torrent.on("metadata", () => {
-        console.log("Torrent metadata received!");
+        console.log("Metadata received for:", torrent.name);
         clearTimeout(timeoutId);
 
         const torrentInfo: TorrentInfo = {
@@ -237,15 +365,15 @@ export default function TorrentClient() {
             type: getFileType(file.name),
             webTorrentFile: file,
           })),
-          progress: torrent.progress || 0,
-          downloadSpeed: torrent.downloadSpeed || 0,
-          uploadSpeed: torrent.uploadSpeed || 0,
-          downloaded: torrent.downloaded || 0,
-          uploaded: torrent.uploaded || 0,
-          numPeers: torrent.numPeers || 0,
-          timeRemaining: torrent.timeRemaining || 0,
-          ready: torrent.ready || false,
-          done: torrent.done || false,
+          progress: 0,
+          downloadSpeed: 0,
+          uploadSpeed: 0,
+          downloaded: 0,
+          uploaded: 0,
+          numPeers: 0,
+          timeRemaining: 0,
+          ready: false,
+          done: false,
           paused: false,
           webTorrentInstance: torrent,
         };
@@ -254,19 +382,19 @@ export default function TorrentClient() {
         setSelectedTorrent(torrentInfo);
         setIsTorrentLoading(false);
 
-        console.log("Torrent info created:", torrentInfo);
-
-        // Update torrent info every second
         const updateInterval = setInterval(() => {
+          const currentSpeed = torrent.downloadSpeed || 0;
+          const timeRemaining = calculateTimeRemaining(torrent);
+
           const updatedInfo: TorrentInfo = {
             ...torrentInfo,
             progress: torrent.progress || 0,
-            downloadSpeed: torrent.downloadSpeed || 0,
+            downloadSpeed: torrent.done ? 0 : currentSpeed,
             uploadSpeed: torrent.uploadSpeed || 0,
             downloaded: torrent.downloaded || 0,
             uploaded: torrent.uploaded || 0,
             numPeers: torrent.numPeers || 0,
-            timeRemaining: torrent.timeRemaining || 0,
+            timeRemaining: timeRemaining,
             ready: torrent.ready || false,
             done: torrent.done || false,
             files: torrent.files.map((file: any, index: number) => ({
@@ -278,12 +406,10 @@ export default function TorrentClient() {
             webTorrentInstance: torrent,
           };
 
-          // Update torrents list
           setTorrents((prev) =>
             prev.map((t) => (t.infoHash === torrent.infoHash ? updatedInfo : t))
           );
 
-          // Update selected torrent if it matches
           setSelectedTorrent((prevSelected) => {
             if (prevSelected?.infoHash === torrent.infoHash) {
               return updatedInfo;
@@ -291,33 +417,21 @@ export default function TorrentClient() {
             return prevSelected;
           });
 
-          // Check if torrent completed and handle download
           if (torrent.done && !completedTorrents.has(torrent.infoHash)) {
-            console.log("Torrent download completed!");
+            console.log("Torrent completed:", torrent.name);
             setCompletedTorrents((prev) => new Set(prev).add(torrent.infoHash));
-
-            // Show completion notification
-            setError(null);
-
-            // Automatically download all files (optional - you can comment this out)
-            // downloadAllFiles(torrent);
-
-            // Clear the interval
             clearInterval(updateInterval);
             updateIntervalsRef.current.delete(torrent.infoHash);
           }
         }, 1000);
 
-        // Store interval reference for cleanup
         updateIntervalsRef.current.set(torrent.infoHash, updateInterval);
       });
 
-      // Handle torrent ready event
       torrent.on("ready", () => {
-        console.log("Torrent is ready!");
+        console.log("Torrent ready:", torrent.name);
       });
 
-      // Handle torrent error
       torrent.on("error", (err: Error) => {
         console.error("Torrent error:", err);
         clearTimeout(timeoutId);
@@ -325,32 +439,28 @@ export default function TorrentClient() {
         setIsTorrentLoading(false);
       });
 
-      // Handle torrent warning
       torrent.on("warning", (err: Error) => {
         console.warn("Torrent warning:", err);
       });
 
-      // Handle when torrent is done
       torrent.on("done", () => {
-        console.log("Torrent download finished!");
+        console.log("Download completed:", torrent.name);
       });
 
-      // Log peer connections
       torrent.on("peer", (addr: string) => {
         console.log("Connected to peer:", addr);
       });
 
-      // Handle noPeers event
       torrent.on("noPeers", (announceType: string) => {
         console.log("No peers found via", announceType);
+        if (announceType === "tracker") {
+          console.log("Attempting to discover more peers...");
+        }
       });
     } catch (err) {
       clearTimeout(timeoutId);
-      setError(
-        `Failed to add torrent: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`
-      );
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(`Failed to add torrent: ${errorMessage}`);
       console.error("Error adding torrent:", err);
       setIsTorrentLoading(false);
     }
@@ -359,13 +469,11 @@ export default function TorrentClient() {
   const handleMagnetSubmit = async (
     e: React.FormEvent | React.MouseEvent | React.KeyboardEvent
   ) => {
-    console.log("inside handleMagnetSubmit");
     e.preventDefault();
     if (magnetUrl.trim()) {
       setIsTorrentLoading(true);
-      console.log("calling addTorrent with:", magnetUrl.trim());
       await addTorrent(magnetUrl.trim());
-      setMagnetUrl(""); // Clear the input after submission
+      setMagnetUrl("");
     }
   };
 
@@ -392,17 +500,31 @@ export default function TorrentClient() {
     }
   };
 
+  const handleSpeedLimitChange = (
+    type: "download" | "upload",
+    value: string
+  ) => {
+    const numValue = parseInt(value) || 0;
+    setSpeedLimits((prev) => ({
+      ...prev,
+      [type]: numValue,
+    }));
+  };
+
+  const applySpeedLimitSettings = () => {
+    applySpeedLimits();
+    setShowSpeedSettings(false);
+  };
+
   if (!webTorrentLoaded) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-        <Card className="p-8 max-w-md text-center bg-gray-800/50 border-gray-700">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-white mb-2">
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black flex items-center justify-center p-4">
+        <Card className="p-12 max-w-md text-center bg-gray-900/90 border-gray-700 shadow-2xl">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-white mb-3">
             Loading WebTorrent
           </h2>
-          <p className="text-gray-400">
-            Please wait while we load the torrent engine...
-          </p>
+          <p className="text-gray-300">Initializing torrent engine...</p>
         </Card>
       </div>
     );
@@ -410,13 +532,13 @@ export default function TorrentClient() {
 
   if (!webTorrentSupported) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-        <Card className="p-8 max-w-md text-center bg-gray-800/50 border-gray-700">
-          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black flex items-center justify-center p-4">
+        <Card className="p-12 max-w-md text-center bg-gray-900/90 border-gray-700 shadow-2xl">
+          <AlertCircle className="w-20 h-20 text-red-400 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-white mb-3">
             WebRTC Not Supported
           </h2>
-          <p className="text-gray-400">
+          <p className="text-gray-300">
             Your browser doesn&apos;t support WebRTC, which is required for
             WebTorrent. Please use a modern browser like Chrome, Firefox, or
             Safari.
@@ -427,51 +549,141 @@ export default function TorrentClient() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      {/* Header */}
-      <div className="border-b border-gray-700/50 bg-gray-900/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-6">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black">
+      <div className="border-b border-gray-800/50 bg-black/80 backdrop-blur-md">
+        <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Torritory</h1>
-              <p className="text-gray-400 text-xs">
-                Download torrents directly in your browser.
+              <h1 className="text-5xl font-black mb-2 tracking-tight bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent h-14">
+                Torritory
+              </h1>
+              <p className="text-gray-400 text-base font-medium">
+                High-performance browser-based torrent client
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <Badge
+              <Button
                 variant="outline"
-                className="border-green-500/50 text-green-400"
+                size="sm"
+                onClick={() => setShowSpeedSettings(!showSpeedSettings)}
+                className="border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white transition-all duration-200 h-8.5"
               >
-                <CheckCircle2 className="w-3 h-3 mr-1" />
-                WebRTC Ready
-              </Badge>
+                <Settings className="w-4 h-4 mr-2" />
+                Speed Limits
+              </Button>
+
+              <div className="flex flex-col gap-1 border  rounded-2xl  items-center">
+                <Badge
+                  variant="outline"
+                  className="border-blue-500/70 text-blue-400 font-medium px-2 py-0.5 text-xs p-1 pr-1.5"
+                >
+                  <Button
+                    variant="ghost"
+                    onClick={refreshTrackers}
+                    disabled={isRefreshingTrackers}
+                    className=" text-blue-400 hover:bg-blue-800 hover:text-white transition-all duration-200 h-6 w-6 mr-2 cursor-pointer"
+                  >
+                    {isRefreshingTrackers ? (
+                      <Loader className="w-4 h-4  animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 " />
+                    )}
+                  </Button>
+                  {/* {" | "} */}
+                  <Globe className="w-3 h-3 mr-0.5" />
+                  {trackerStats.totalCount} Trackers
+                </Badge>
+              </div>
             </div>
           </div>
+
+          {showSpeedSettings && (
+            <div className="mt-6 p-6 bg-gray-900/80 rounded-xl border border-gray-700">
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Speed Limits
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Download Limit (KB/s, 0 = unlimited)
+                  </label>
+                  <Input
+                    type="number"
+                    value={speedLimits.download}
+                    onChange={(e) =>
+                      handleSpeedLimitChange("download", e.target.value)
+                    }
+                    className="bg-gray-800 border-gray-600 text-white"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Upload Limit (KB/s, 0 = unlimited)
+                  </label>
+                  <Input
+                    type="number"
+                    value={speedLimits.upload}
+                    onChange={(e) =>
+                      handleSpeedLimitChange("upload", e.target.value)
+                    }
+                    className="bg-gray-800 border-gray-600 text-white"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <Button onClick={applySpeedLimitSettings} size="sm">
+                  Apply
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSpeedSettings(false)}
+                  size="sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {trackerStats.lastFetched && (
+            <div className="mt-4 p-3 bg-transparent rounded-lg border border-gray-700/50">
+              <div className="flex items-center justify-between text-sm text-gray-400">
+                <span>
+                  Tracker Status: {trackerStats.httpsCount} HTTPS,{" "}
+                  {trackerStats.wssCount} WSS
+                </span>
+                <span>
+                  Last Updated: {trackerStats.lastFetched.toLocaleTimeString()}
+                  {!trackerStats.cached && " (Using cached data)"}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-6 py-8">
         {error && (
-          <Alert className="mb-6 bg-red-900/20 border-red-500/50">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-red-400">
+          <Alert className="mb-8 bg-red-950/50 border-red-500/50 shadow-lg">
+            <AlertCircle className="h-5 w-5" />
+            <AlertDescription className="text-red-300 font-medium text-base">
               {error}
             </AlertDescription>
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Panel - Add Torrent */}
-          <div className="lg:col-span-1">
-            <Card className="p-6 bg-gray-800/50 border-gray-700">
-              <h2 className="text-xl font-semibold text-white mb-4">
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
+          <div className="xl:col-span-2 flex flex-col gap-6">
+            <Card className="p-5 bg-gray-900/90 border-gray-700/50 shadow-xl backdrop-blur-sm">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Zap className="w-5 h-5 mr-2 text-emerald-400" />
                 Add Torrent
               </h2>
 
-              {/* Magnet URL Input */}
-              <div className="mb-6">
-                <div className="flex gap-2">
+              <div className="mb-4">
+                <div className="flex gap-3">
                   <Input
                     type="text"
                     placeholder="Paste magnet URL here..."
@@ -482,13 +694,13 @@ export default function TorrentClient() {
                         handleMagnetSubmit(e);
                       }
                     }}
-                    className="bg-gray-700/50 border-gray-600 text-white placeholder-gray-400"
+                    className="bg-gray-800/90 border-gray-600 text-white placeholder-gray-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200"
                     disabled={isTorrentLoading}
                   />
                   <Button
                     onClick={handleMagnetSubmit}
                     disabled={!magnetUrl.trim() || isTorrentLoading}
-                    className="cursor-pointer text-gray-400 hover:text-white"
+                    className="bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 transition-all duration-200 min-w-[48px]"
                   >
                     {!isTorrentLoading && <Link className="w-4 h-4" />}
                     {isTorrentLoading && (
@@ -496,85 +708,130 @@ export default function TorrentClient() {
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Paste your torrent magnet link here
-                </p>
                 {isTorrentLoading && (
-                  <p className="text-xs text-blue-400 mt-2 animate-pulse">
-                    Connecting to peers and fetching metadata...
+                  <p className="text-sm text-emerald-400 mt-3 animate-pulse flex items-center">
+                    <Activity className="w-4 h-4 mr-2" />
+                    Connecting to swarm with {trackerStats.totalCount}{" "}
+                    trackers...
                   </p>
                 )}
               </div>
 
-              {/* File Upload */}
               <TorrentUpload onFileUpload={handleFileUpload} />
             </Card>
 
-            {/* Torrent List */}
-            <Card className="mt-6 p-6 bg-gray-800/50 border-gray-700">
-              <h2 className="text-xl font-semibold text-white mb-4">
-                Active Torrents
-              </h2>
-              <ScrollArea className="h-64">
-                {torrents.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">
-                    No active torrents
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {torrents.map((torrent) => (
-                      <div
-                        key={torrent.infoHash}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                          selectedTorrent?.infoHash === torrent.infoHash
-                            ? "bg-blue-600/20 border border-blue-500/50"
-                            : "bg-gray-700/30 hover:bg-gray-700/50"
-                        }`}
-                        onClick={() => setSelectedTorrent(torrent)}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-medium text-white truncate">
-                            {torrent.name}
-                          </h3>
-                          <div className="flex gap-2">
-                            <Badge
-                              variant={torrent.done ? "default" : "secondary"}
-                            >
-                              {torrent.done ? "Complete" : "Downloading"}
-                            </Badge>
-                            {torrent.done && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownloadAll(torrent);
-                                }}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <Download className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <Progress
-                          value={torrent.progress * 100}
-                          className="h-1"
-                        />
-                        <div className="flex justify-between text-xs text-gray-400 mt-1">
-                          <span>{Math.round(torrent.progress * 100)}%</span>
-                          <span>{formatBytes(torrent.downloadSpeed)}/s</span>
-                        </div>
+            {selectedTorrent && (
+              <>
+                <Card className="flex-1 p-5 bg-gray-900/90 border-gray-700/50 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-between">
+                    <span className="flex items-center">
+                      <Activity className="w-5 h-5 mr-2 text-blue-400" />
+                      Active Torrents
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-gray-300 border-gray-600"
+                    >
+                      {torrents.length}
+                    </Badge>
+                  </h2>
+
+                  <ScrollArea className="h-[500px] pr-3">
+                    {torrents.length === 0 ? (
+                      <div className="text-center py-12">
+                        <HardDrive className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+                        <p className="text-gray-500 text-lg">
+                          No active torrents
+                        </p>
+                        <p className="text-gray-600 text-sm mt-2">
+                          Add a torrent to get started
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </Card>
+                    ) : (
+                      <div className="space-y-3">
+                        {torrents.map((torrent) => (
+                          <div
+                            key={torrent.infoHash}
+                            className={`p-4 rounded-xl cursor-pointer transition-all duration-200 border ${
+                              selectedTorrent?.infoHash === torrent.infoHash
+                                ? "bg-emerald-900/30 border-emerald-500/60 shadow-lg shadow-emerald-500/10"
+                                : "bg-gray-800/60 border-gray-700/50 hover:border-emerald-500/30 hover:bg-emerald-900/10"
+                            }`}
+                            onClick={() => setSelectedTorrent(torrent)}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-base font-semibold text-white truncate pr-2 flex-1">
+                                {torrent.name}
+                              </h3>
+                              <div className="flex gap-2 flex-shrink-0">
+                                <Badge
+                                  variant={
+                                    torrent.done ? "default" : "secondary"
+                                  }
+                                  className={`text-xs font-medium ${
+                                    torrent.done
+                                      ? "bg-emerald-600/80 text-white border-emerald-500"
+                                      : "bg-blue-600/80 text-white border-blue-500"
+                                  }`}
+                                >
+                                  {torrent.done ? "Complete" : "Downloading"}
+                                </Badge>
+                                {torrent.done && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownloadAll(torrent);
+                                    }}
+                                    className="h-6 px-2 text-xs border-emerald-500 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all duration-200"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            <Progress
+                              value={torrent.progress * 100}
+                              className={`h-2 mb-2 ${
+                                torrent.done
+                                  ? "[&>div]:bg-emerald-500"
+                                  : torrent.progress > 0
+                                  ? "[&>div]:bg-blue-500 [&>div]:animate-pulse"
+                                  : "[&>div]:bg-gray-600"
+                              }`}
+                            />
+
+                            <div className="flex justify-between items-center text-xs">
+                              <div className="flex items-center gap-4 text-gray-400">
+                                <span className="font-medium">
+                                  {Math.round(torrent.progress * 100)}%
+                                </span>
+                                <span className="flex items-center">
+                                  <Download className="w-3 h-3 mr-1" />
+                                  {formatBytes(torrent.downloadSpeed)}/s
+                                </span>
+                                <span className="flex items-center">
+                                  <Users className="w-3 h-3 mr-1" />
+                                  {torrent.numPeers}
+                                </span>
+                              </div>
+                              <span className="text-gray-500 font-medium">
+                                {formatTime(torrent.timeRemaining)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </Card>
+              </>
+            )}
           </div>
 
-          {/* Right Panel - Torrent Details */}
-          <div className="lg:col-span-2">
+          <div className="xl:col-span-3">
             {selectedTorrent ? (
               <TorrentDetails
                 torrent={selectedTorrent}
@@ -584,21 +841,20 @@ export default function TorrentClient() {
                 formatTime={formatTime}
               />
             ) : (
-              <Card className="p-12 bg-gray-800/50 border-gray-700 text-center">
-                <HardDrive className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-white mb-2">
+              <Card className="p-16 bg-gray-900/90 border-gray-700/50 text-center min-h-[600px] flex flex-col items-center justify-center shadow-xl">
+                <HardDrive className="w-24 h-24 text-gray-600 mx-auto mb-6" />
+                <h2 className="text-3xl font-bold text-white mb-3">
                   No Torrent Selected
                 </h2>
-                <p className="text-gray-400">
+                <p className="text-gray-400 text-lg max-w-md">
                   Add a torrent using a magnet URL or .torrent file to get
-                  started
+                  started with downloading and streaming
                 </p>
               </Card>
             )}
           </div>
         </div>
 
-        {/* Media Player Modal */}
         {selectedFile && selectedTorrent && (
           <MediaPlayer
             file={selectedFile}

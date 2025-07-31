@@ -18,7 +18,13 @@ import {
   FileImage,
   FileText,
   File,
+  Activity,
+  HardDrive,
+  Globe,
+  Copy,
+  CheckCircle2,
 } from "lucide-react";
+import { useState } from "react";
 
 interface TorrentFile {
   name: string;
@@ -64,6 +70,9 @@ export default function TorrentDetails({
   formatBytes,
   formatTime,
 }: TorrentDetailsProps) {
+  const [copiedHash, setCopiedHash] = useState(false);
+  const [copiedMagnet, setCopiedMagnet] = useState(false);
+
   const getFileIcon = (type: TorrentFile["type"]) => {
     switch (type) {
       case "video":
@@ -94,218 +103,394 @@ export default function TorrentDetails({
     }
   };
 
+  const getFileTypeBadgeColor = (type: TorrentFile["type"]) => {
+    switch (type) {
+      case "video":
+        return "bg-red-500/20 text-red-300 border-red-500/50";
+      case "audio":
+        return "bg-green-500/20 text-green-300 border-green-500/50";
+      case "image":
+        return "bg-blue-500/20 text-blue-300 border-blue-500/50";
+      case "document":
+        return "bg-yellow-500/20 text-yellow-300 border-yellow-500/50";
+      default:
+        return "bg-gray-500/20 text-gray-300 border-gray-500/50";
+    }
+  };
+
+  const copyToClipboard = async (text: string, type: "hash" | "magnet") => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (type === "hash") {
+        setCopiedHash(true);
+        setTimeout(() => setCopiedHash(false), 2000);
+      } else {
+        setCopiedMagnet(true);
+        setTimeout(() => setCopiedMagnet(false), 2000);
+      }
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  const downloadAllFiles = () => {
+    torrent.files.forEach((file) => {
+      if (file.webTorrentFile && file.progress > 0) {
+        onDownloadFile(file);
+      }
+    });
+  };
+
+  const filesByType = torrent.files.reduce((acc, file) => {
+    if (!acc[file.type]) acc[file.type] = [];
+    acc[file.type].push(file);
+    return acc;
+  }, {} as Record<string, TorrentFile[]>);
+
+  const typeOrder = ["video", "audio", "image", "document", "other"];
+  const sortedFileTypes = typeOrder.filter(
+    (type) => filesByType[type]?.length > 0
+  );
+
   return (
-    <Card className="p-6 bg-gray-800/50 border-gray-700">
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-semibold text-white">{torrent.name}</h2>
-          <div className="flex gap-2 items-center">
-            <Badge variant={torrent.done ? "default" : "secondary"}>
-              {torrent.done ? "Complete" : "Downloading"}
-            </Badge>
+    <Card className="bg-gray-900/90 border-gray-700/50 shadow-2xl backdrop-blur-sm overflow-hidden">
+      <div className="p-6 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/50 to-gray-900/50">
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-2xl font-bold text-white mb-2 leading-tight">
+              {torrent.name}
+            </h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Badge
+                variant={torrent.done ? "default" : "secondary"}
+                className={`font-semibold ${
+                  torrent.done
+                    ? "bg-emerald-600/80 text-white border-emerald-500"
+                    : "bg-blue-600/80 text-white border-blue-500"
+                }`}
+              >
+                <Activity className="w-3 h-3 mr-1" />
+                {torrent.done ? "Complete" : "Downloading"}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="text-gray-300 border-gray-600"
+              >
+                <HardDrive className="w-3 h-3 mr-1" />
+                {formatBytes(torrent.length)}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="text-gray-300 border-gray-600"
+              >
+                <File className="w-3 h-3 mr-1" />
+                {torrent.files.length} files
+              </Badge>
+            </div>
+          </div>
+          <div className="flex gap-2 ml-4">
             {torrent.done && (
               <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (torrent.webTorrentInstance) {
-                    torrent.files.forEach((file) => {
-                      if (file.webTorrentFile) {
-                        onDownloadFile(file);
-                      }
-                    });
-                  }
-                }}
-                className="text-green-400 border-green-400 hover:bg-green-400/10"
+                onClick={downloadAllFiles}
+                className="bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 transition-all duration-200"
               >
-                <Download className="w-4 h-4 mr-1" />
+                <Download className="w-4 h-4 mr-2" />
                 Download All
               </Button>
             )}
           </div>
         </div>
 
-        <div className="mb-4">
-          <div className="flex justify-between text-sm text-gray-400 mb-2">
-            <span>Progress: {Math.round((torrent.progress || 0) * 100)}%</span>
-            <span>
+        <div className="mb-6">
+          <div className="flex justify-between items-center text-sm text-gray-300 mb-3">
+            <span className="font-semibold">
+              Progress: {Math.round((torrent.progress || 0) * 100)}%
+            </span>
+            <span className="font-medium">
               {formatBytes(torrent.downloaded || 0)} /{" "}
               {formatBytes(torrent.length || 0)}
             </span>
           </div>
-          <Progress value={(torrent.progress || 0) * 100} className="h-2" />
+          <Progress
+            value={(torrent.progress || 0) * 100}
+            className={`h-3 ${
+              torrent.done
+                ? "[&>div]:bg-emerald-500"
+                : torrent.progress > 0
+                ? "[&>div]:bg-blue-500 [&>div]:animate-pulse"
+                : "[&>div]:bg-gray-600"
+            }`}
+          />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="flex items-center gap-2 text-sm">
-            <Download className="w-4 h-4 text-green-400" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-800/50 border border-gray-700/50">
+            <div className="p-2 rounded-lg bg-emerald-500/20">
+              <Download className="w-4 h-4 text-emerald-400" />
+            </div>
             <div>
-              <div className="text-white font-medium">
+              <div className="text-white font-bold text-lg">
                 {formatBytes(torrent.downloadSpeed || 0)}/s
               </div>
-              <div className="text-gray-400">Download</div>
+              <div className="text-gray-400 text-sm font-medium">Download</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-sm">
-            <Upload className="w-4 h-4 text-blue-400" />
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-800/50 border border-gray-700/50">
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <Upload className="w-4 h-4 text-blue-400" />
+            </div>
             <div>
-              <div className="text-white font-medium">
+              <div className="text-white font-bold text-lg">
                 {formatBytes(torrent.uploadSpeed || 0)}/s
               </div>
-              <div className="text-gray-400">Upload</div>
+              <div className="text-gray-400 text-sm font-medium">Upload</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-sm">
-            <Users className="w-4 h-4 text-purple-400" />
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-800/50 border border-gray-700/50">
+            <div className="p-2 rounded-lg bg-purple-500/20">
+              <Users className="w-4 h-4 text-purple-400" />
+            </div>
             <div>
-              <div className="text-white font-medium">
+              <div className="text-white font-bold text-lg">
                 {torrent.numPeers || 0}
               </div>
-              <div className="text-gray-400">Peers</div>
+              <div className="text-gray-400 text-sm font-medium">Peers</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-sm">
-            <Clock className="w-4 h-4 text-orange-400" />
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-800/50 border border-gray-700/50">
+            <div className="p-2 rounded-lg bg-orange-500/20">
+              <Clock className="w-4 h-4 text-orange-400" />
+            </div>
             <div>
-              <div className="text-white font-medium">
+              <div className="text-white font-bold text-lg">
                 {formatTime(torrent.timeRemaining || 0)}
               </div>
-              <div className="text-gray-400">Remaining</div>
+              <div className="text-gray-400 text-sm font-medium">Remaining</div>
             </div>
           </div>
         </div>
       </div>
 
-      <Tabs defaultValue="files" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-gray-700/50">
-          <TabsTrigger value="files">
-            Files ({torrent.files?.length || 0})
-          </TabsTrigger>
-          <TabsTrigger value="info">Info</TabsTrigger>
-        </TabsList>
+      <div className="p-6">
+        <Tabs defaultValue="files" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 bg-gray-800/50 border border-gray-700/50">
+            <TabsTrigger
+              value="files"
+              className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-semibold"
+            >
+              <File className="w-4 h-4 mr-2" />
+              Files ({torrent.files?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger
+              value="info"
+              className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-semibold"
+            >
+              <Globe className="w-4 h-4 mr-2" />
+              Torrent Info
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="files" className="mt-4">
-          <ScrollArea className="h-96">
-            <div className="space-y-2">
-              {(torrent.files || []).map((file, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 rounded-lg bg-gray-700/30 hover:bg-gray-700/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className={getFileTypeColor(file.type)}>
-                      {getFileIcon(file.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white font-medium truncate">
-                        {file.name}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {formatBytes(file.length || 0)} •{" "}
-                        {Math.round((file.progress || 0) * 100)}%
-                      </div>
-                      <Progress
-                        value={(file.progress || 0) * 100}
-                        className="h-1 mt-1"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 ml-2">
-                    {["video", "audio"].includes(file.type) &&
-                      (file.progress || 0) > 0 && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onPlayFile(file)}
-                          className="text-blue-400 border-blue-400 hover:bg-blue-400/10"
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Play
-                        </Button>
-                      )}
-
-                    {(file.progress || 0) > 0 && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onDownloadFile(file)}
-                        className="text-green-400 border-green-400 hover:bg-green-400/10"
+          <TabsContent value="files" className="mt-6">
+            <ScrollArea className="h-[500px] pr-4">
+              <div className="space-y-6">
+                {sortedFileTypes.map((fileType) => (
+                  <div key={fileType} className="space-y-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div
+                        className={getFileTypeColor(
+                          fileType as TorrentFile["type"]
+                        )}
                       >
-                        <Download className="w-3 h-3 mr-1" />
-                        Save
-                      </Button>
+                        {getFileIcon(fileType as TorrentFile["type"])}
+                      </div>
+                      <h3 className="text-lg font-semibold text-white capitalize">
+                        {fileType} Files
+                      </h3>
+                      <Badge
+                        variant="outline"
+                        className={getFileTypeBadgeColor(
+                          fileType as TorrentFile["type"]
+                        )}
+                      >
+                        {filesByType[fileType].length}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-2">
+                      {filesByType[fileType].map((file, index) => (
+                        <div
+                          key={`${fileType}-${index}`}
+                          className="group flex items-center justify-between p-4 rounded-xl bg-gray-800/40 hover:bg-gray-800/60 transition-all duration-200 border border-gray-700/30 hover:border-gray-600/50"
+                        >
+                          <div className="flex items-center gap-4 flex-1 min-w-0">
+                            <div
+                              className={`${getFileTypeColor(
+                                file.type
+                              )} opacity-80 group-hover:opacity-100 transition-opacity`}
+                            >
+                              {getFileIcon(file.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-white font-medium truncate text-base">
+                                {file.name}
+                              </div>
+                              <div className="flex items-center gap-4 text-sm text-gray-400 mt-1">
+                                <span className="font-medium">
+                                  {formatBytes(file.length || 0)}
+                                </span>
+                                <span
+                                  className={`font-semibold ${
+                                    file.progress > 0.8
+                                      ? "text-emerald-400"
+                                      : file.progress > 0.3
+                                      ? "text-blue-400"
+                                      : "text-gray-400"
+                                  }`}
+                                >
+                                  {Math.round((file.progress || 0) * 100)}%
+                                </span>
+                              </div>
+                              <Progress
+                                value={(file.progress || 0) * 100}
+                                className={`h-1.5 mt-2 ${
+                                  file.progress > 0.8
+                                    ? "[&>div]:bg-emerald-500"
+                                    : file.progress > 0.3
+                                    ? "[&>div]:bg-blue-500"
+                                    : file.progress > 0
+                                    ? "[&>div]:bg-yellow-500"
+                                    : "[&>div]:bg-gray-600"
+                                }`}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {["video", "audio"].includes(file.type) &&
+                              (file.progress || 0) > 0.1 && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => onPlayFile(file)}
+                                  className="bg-blue-600/80 hover:bg-blue-600 text-white border-0 transition-all duration-200"
+                                >
+                                  <Play className="w-3 h-3 mr-1" />
+                                  Stream
+                                </Button>
+                              )}
+
+                            {(file.progress || 0) > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onDownloadFile(file)}
+                                className="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all duration-200"
+                              >
+                                <Download className="w-3 h-3 mr-1" />
+                                Save
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="info" className="mt-6">
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
+                    Info Hash
+                  </label>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => copyToClipboard(torrent.infoHash, "hash")}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    {copiedHash ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
                     )}
+                  </Button>
+                </div>
+                <div className="text-white font-mono text-sm bg-gray-900/50 p-3 rounded-lg border border-gray-700/50 break-all">
+                  {torrent.infoHash}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
+                    Magnet URI
+                  </label>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => copyToClipboard(torrent.magnetURI, "magnet")}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    {copiedMagnet ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="text-white font-mono text-sm bg-gray-900/50 p-3 rounded-lg border border-gray-700/50 break-all max-h-32 overflow-y-auto">
+                  {torrent.magnetURI}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                  <label className="text-sm font-semibold text-gray-400 uppercase tracking-wide block mb-2">
+                    Total Size
+                  </label>
+                  <div className="text-white font-bold text-xl">
+                    {formatBytes(torrent.length || 0)}
                   </div>
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </TabsContent>
 
-        <TabsContent value="info" className="mt-4">
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-gray-400">
-                Info Hash
-              </label>
-              <div className="text-white font-mono text-sm bg-gray-700/50 p-2 rounded mt-1">
-                {torrent.infoHash}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-400">
-                Magnet URI
-              </label>
-              <div className="text-white font-mono text-sm bg-gray-700/50 p-2 rounded mt-1 break-all">
-                {torrent.magnetURI}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-400">
-                  Total Size
-                </label>
-                <div className="text-white font-medium">
-                  {formatBytes(torrent.length || 0)}
+                <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                  <label className="text-sm font-semibold text-gray-400 uppercase tracking-wide block mb-2">
+                    File Count
+                  </label>
+                  <div className="text-white font-bold text-xl">
+                    {torrent.files?.length || 0}
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-400">
-                  Files
-                </label>
-                <div className="text-white font-medium">
-                  {torrent.files?.length || 0}
+                <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                  <label className="text-sm font-semibold text-gray-400 uppercase tracking-wide block mb-2">
+                    Downloaded
+                  </label>
+                  <div className="text-emerald-400 font-bold text-xl">
+                    {formatBytes(torrent.downloaded || 0)}
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-400">
-                  Downloaded
-                </label>
-                <div className="text-white font-medium">
-                  {formatBytes(torrent.downloaded || 0)}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-400">
-                  Uploaded
-                </label>
-                <div className="text-white font-medium">
-                  {formatBytes(torrent.uploaded || 0)}
+                <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                  <label className="text-sm font-semibold text-gray-400 uppercase tracking-wide block mb-2">
+                    Uploaded
+                  </label>
+                  <div className="text-blue-400 font-bold text-xl">
+                    {formatBytes(torrent.uploaded || 0)}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+        </Tabs>
+      </div>
     </Card>
   );
 }
