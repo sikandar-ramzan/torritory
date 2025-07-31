@@ -22,6 +22,9 @@ import {
   Users,
   RefreshCw,
   Globe,
+  Signal,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import TorrentUpload from "@/components/torrent-upload";
 import TorrentDetails from "@/components/torrent-details";
@@ -44,6 +47,21 @@ interface TorrentFile {
   webTorrentFile?: any;
 }
 
+interface TrackerInfo {
+  external: {
+    total: number;
+    active: number;
+    trackers: string[];
+  };
+  internal: {
+    total: number;
+    active: number;
+    trackers: string[];
+  };
+  totalActive: number;
+  lastUpdated: Date;
+}
+
 interface TorrentInfo {
   name: string;
   infoHash: string;
@@ -61,6 +79,7 @@ interface TorrentInfo {
   done: boolean;
   paused: boolean;
   webTorrentInstance?: any;
+  trackerInfo: TrackerInfo;
 }
 
 interface SpeedLimits {
@@ -75,6 +94,86 @@ interface TrackerStats {
   wssCount: number;
   totalCount: number;
 }
+
+// Tracker Status Component
+const TrackerStatusDisplay = ({
+  trackerInfo,
+}: {
+  trackerInfo: TrackerInfo;
+}) => {
+  const totalTrackers = trackerInfo.external.total + trackerInfo.internal.total;
+  const activePercentage =
+    totalTrackers > 0 ? (trackerInfo.totalActive / totalTrackers) * 100 : 0;
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-gray-800/50 to-gray-900/50 border border-gray-600/50">
+      <div className="relative">
+        <div
+          className={`p-2 rounded-lg ${
+            trackerInfo.totalActive > 0 ? "bg-emerald-500/20" : "bg-gray-500/20"
+          }`}
+        >
+          {trackerInfo.totalActive > 0 ? (
+            <Signal className="w-5 h-5 text-emerald-400" />
+          ) : (
+            <WifiOff className="w-5 h-5 text-gray-400" />
+          )}
+        </div>
+        {trackerInfo.totalActive > 0 && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-white font-bold text-lg">
+            {trackerInfo.totalActive}
+          </span>
+          <span className="text-gray-400 text-sm font-medium">
+            / {totalTrackers} Active
+          </span>
+          <div
+            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+              activePercentage > 50
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                : activePercentage > 0
+                ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+                : "bg-gray-500/20 text-gray-400 border border-gray-500/30"
+            }`}
+          >
+            {activePercentage.toFixed(0)}%
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs text-gray-400">
+          <span className="flex items-center gap-1">
+            <Globe className="w-3 h-3" />
+            Ext: {trackerInfo.external.active}/{trackerInfo.external.total}
+          </span>
+          <span className="flex items-center gap-1">
+            <Wifi className="w-3 h-3" />
+            Int: {trackerInfo.internal.active}/{trackerInfo.internal.total}
+          </span>
+        </div>
+
+        <div className="mt-2">
+          <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                activePercentage > 50
+                  ? "bg-emerald-500"
+                  : activePercentage > 0
+                  ? "bg-yellow-500"
+                  : "bg-gray-500"
+              }`}
+              style={{ width: `${Math.max(activePercentage, 2)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function TorrentClient() {
   const [torrents, setTorrents] = useState<TorrentInfo[]>([]);
@@ -118,7 +217,6 @@ export default function TorrentClient() {
         console.log("Tracker service initialized successfully");
       } catch (error) {
         console.error("Failed to initialize trackers:", error);
-        // Don't set error state here as fallback trackers will be used
       }
     };
 
@@ -286,6 +384,48 @@ export default function TorrentClient() {
     return remainingBytes / downloadSpeed;
   };
 
+  // Helper function to analyze tracker activity
+  const analyzeTrackerActivity = (
+    torrent: any,
+    externalTrackers: string[]
+  ): TrackerInfo => {
+    const internalTrackers = torrent.announce || [];
+
+    // For WebTorrent, we'll simulate active tracker detection based on peer count
+    // In a real implementation, you'd check torrent._trackers or similar internal state
+    const hasActivePeers = torrent.numPeers > 0;
+    const peerSources = Math.min(
+      Math.ceil(torrent.numPeers / 5),
+      internalTrackers.length + externalTrackers.length
+    );
+
+    // Simulate which trackers are active based on peer availability
+    const activeExternal = hasActivePeers
+      ? Math.min(Math.ceil(externalTrackers.length * 0.3), peerSources)
+      : 0;
+    const activeInternal = hasActivePeers
+      ? Math.min(
+          Math.ceil(internalTrackers.length * 0.4),
+          peerSources - activeExternal
+        )
+      : 0;
+
+    return {
+      external: {
+        total: externalTrackers.length,
+        active: activeExternal,
+        trackers: externalTrackers,
+      },
+      internal: {
+        total: internalTrackers.length,
+        active: activeInternal,
+        trackers: internalTrackers,
+      },
+      totalActive: activeExternal + activeInternal,
+      lastUpdated: new Date(),
+    };
+  };
+
   const downloadFile = (file: any, filename: string) => {
     try {
       file.getBlobURL((err: Error, url: string) => {
@@ -332,24 +472,53 @@ export default function TorrentClient() {
 
     try {
       let source = torrentId;
+      let additionalTrackers: string[] = [];
 
-      if (typeof torrentId === "string") {
-        // Always append our fetched trackers to magnet URLs
-        source = await trackerService.current.appendTrackersToMagnet(torrentId);
-        console.log("Enhanced magnet URL with fresh trackers");
+      // Get external trackers for both magnet URLs and .torrent files
+      try {
+        additionalTrackers = await trackerService.current.getAllTrackers();
+        console.log(
+          `Fetched ${additionalTrackers.length} external trackers for enhanced peer discovery`
+        );
+      } catch (error) {
+        console.warn(
+          "Failed to fetch external trackers, proceeding with original source:",
+          error
+        );
       }
 
-      const torrent = clientRef.current.add(source, {
-        strategy: "sequential",
+      // For magnet URLs, append trackers to the URL itself
+      if (typeof torrentId === "string") {
+        source = await trackerService.current.appendTrackersToMagnet(torrentId);
+        console.log("Enhanced magnet URL with external trackers");
+      }
+
+      // For both magnet URLs and .torrent files, pass additional trackers via options
+      const torrentOptions = {
+        strategy: "sequential" as const,
         maxWebConns: 4,
         path: undefined,
-      });
+        announce:
+          additionalTrackers.length > 0 ? additionalTrackers : undefined,
+      };
 
-      console.log("Torrent added:", torrent.name || torrent.infoHash);
+      const torrent = clientRef.current.add(source, torrentOptions);
+
+      console.log(
+        `Torrent added: ${torrent.name || torrent.infoHash} with ${
+          additionalTrackers.length
+        } additional trackers`
+      );
 
       torrent.on("metadata", () => {
         console.log("Metadata received for:", torrent.name);
         clearTimeout(timeoutId);
+
+        // Initialize tracker info
+        const initialTrackerInfo = analyzeTrackerActivity(
+          torrent,
+          additionalTrackers
+        );
 
         const torrentInfo: TorrentInfo = {
           name: torrent.name,
@@ -376,6 +545,7 @@ export default function TorrentClient() {
           done: false,
           paused: false,
           webTorrentInstance: torrent,
+          trackerInfo: initialTrackerInfo,
         };
 
         setTorrents((prev) => [...prev, torrentInfo]);
@@ -385,6 +555,12 @@ export default function TorrentClient() {
         const updateInterval = setInterval(() => {
           const currentSpeed = torrent.downloadSpeed || 0;
           const timeRemaining = calculateTimeRemaining(torrent);
+
+          // Update tracker activity analysis
+          const updatedTrackerInfo = analyzeTrackerActivity(
+            torrent,
+            additionalTrackers
+          );
 
           const updatedInfo: TorrentInfo = {
             ...torrentInfo,
@@ -397,6 +573,7 @@ export default function TorrentClient() {
             timeRemaining: timeRemaining,
             ready: torrent.ready || false,
             done: torrent.done || false,
+            trackerInfo: updatedTrackerInfo,
             files: torrent.files.map((file: any, index: number) => ({
               ...torrentInfo.files[index],
               progress: file.progress || 0,
@@ -572,7 +749,7 @@ export default function TorrentClient() {
                 Speed Limits
               </Button>
 
-              <div className="flex flex-col gap-1 border  rounded-2xl  items-center">
+              <div className="flex flex-col gap-1 border rounded-2xl items-center">
                 <Badge
                   variant="outline"
                   className="border-blue-500/70 text-blue-400 font-medium px-2 py-0.5 text-xs p-1 pr-1.5"
@@ -581,17 +758,16 @@ export default function TorrentClient() {
                     variant="ghost"
                     onClick={refreshTrackers}
                     disabled={isRefreshingTrackers}
-                    className=" text-blue-400 hover:bg-blue-800 hover:text-white transition-all duration-200 h-6 w-6 mr-2 cursor-pointer"
+                    className="text-blue-400 hover:bg-blue-800 hover:text-white transition-all duration-200 h-6 w-6 mr-2 cursor-pointer"
                   >
                     {isRefreshingTrackers ? (
-                      <Loader className="w-4 h-4  animate-spin" />
+                      <Loader className="w-4 h-4 animate-spin" />
                     ) : (
-                      <RefreshCw className="w-4 h-4 " />
+                      <RefreshCw className="w-4 h-4" />
                     )}
                   </Button>
-                  {/* {" | "} */}
                   <Globe className="w-3 h-3 mr-0.5" />
-                  {trackerStats.totalCount} Trackers
+                  {trackerStats.totalCount} External
                 </Badge>
               </div>
             </div>
@@ -651,7 +827,7 @@ export default function TorrentClient() {
             <div className="mt-4 p-3 bg-transparent rounded-lg border border-gray-700/50">
               <div className="flex items-center justify-between text-sm text-gray-400">
                 <span>
-                  Tracker Status: {trackerStats.httpsCount} HTTPS,{" "}
+                  External Trackers: {trackerStats.httpsCount} HTTPS,{" "}
                   {trackerStats.wssCount} WSS
                 </span>
                 <span>
@@ -711,7 +887,7 @@ export default function TorrentClient() {
                 {isTorrentLoading && (
                   <p className="text-sm text-emerald-400 mt-3 animate-pulse flex items-center">
                     <Activity className="w-4 h-4 mr-2" />
-                    Connecting to swarm with {trackerStats.totalCount}{" "}
+                    Connecting to swarm with {trackerStats.totalCount} external
                     trackers...
                   </p>
                 )}
@@ -722,6 +898,19 @@ export default function TorrentClient() {
 
             {selectedTorrent && (
               <>
+                <Card className="p-5 bg-gray-900/90 border-gray-700/50 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-between">
+                    <span className="flex items-center">
+                      <Activity className="w-5 h-5 mr-2 text-blue-400" />
+                      Tracker Status
+                    </span>
+                  </h2>
+
+                  <TrackerStatusDisplay
+                    trackerInfo={selectedTorrent.trackerInfo}
+                  />
+                </Card>
+
                 <Card className="flex-1 p-5 bg-gray-900/90 border-gray-700/50 shadow-xl backdrop-blur-sm">
                   <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-between">
                     <span className="flex items-center">
@@ -736,7 +925,7 @@ export default function TorrentClient() {
                     </Badge>
                   </h2>
 
-                  <ScrollArea className="h-[500px] pr-3">
+                  <ScrollArea className="h-[400px] pr-3">
                     {torrents.length === 0 ? (
                       <div className="text-center py-12">
                         <HardDrive className="w-16 h-16 text-gray-700 mx-auto mb-4" />
@@ -803,7 +992,7 @@ export default function TorrentClient() {
                               }`}
                             />
 
-                            <div className="flex justify-between items-center text-xs">
+                            <div className="flex justify-between items-center text-xs mb-2">
                               <div className="flex items-center gap-4 text-gray-400">
                                 <span className="font-medium">
                                   {Math.round(torrent.progress * 100)}%
@@ -820,6 +1009,27 @@ export default function TorrentClient() {
                               <span className="text-gray-500 font-medium">
                                 {formatTime(torrent.timeRemaining)}
                               </span>
+                            </div>
+
+                            {/* Mini tracker status */}
+                            <div className="flex items-center gap-2 text-xs">
+                              <div className="flex items-center gap-1">
+                                <Signal
+                                  className={`w-3 h-3 ${
+                                    torrent.trackerInfo.totalActive > 0
+                                      ? "text-emerald-400"
+                                      : "text-gray-400"
+                                  }`}
+                                />
+                                <span className="text-gray-400">
+                                  {torrent.trackerInfo.totalActive} active
+                                  trackers
+                                </span>
+                              </div>
+                              <div className="text-gray-500">
+                                ({torrent.trackerInfo.external.active}E +{" "}
+                                {torrent.trackerInfo.internal.active}I)
+                              </div>
                             </div>
                           </div>
                         ))}

@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import ReactPlayer from "react-player";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -66,15 +67,13 @@ export default function MediaPlayer({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [buffered, setBuffered] = useState<TimeRanges | null>(null);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [buffered, setBuffered] = useState(0);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const mediaContainerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>(null);
-
-  const mediaRef = file.type === "video" ? videoRef : audioRef;
+  const streamCheckIntervalRef = useRef<NodeJS.Timeout>(null);
 
   useEffect(() => {
     if (!file.webTorrentFile) {
@@ -86,116 +85,67 @@ export default function MediaPlayer({
     setIsLoading(true);
     setError(null);
 
-    const mediaContainer = mediaContainerRef.current;
-    if (mediaContainer && file.webTorrentFile) {
-      mediaContainer.innerHTML = "";
+    const checkStreamReady = () => file.progress >= 0.01;
 
+    const initializeStream = () => {
       try {
-        file.webTorrentFile.appendTo(
-          mediaContainer,
-          {
-            autoplay: false,
-            controls: false,
-            muted: false,
-            preload: "metadata",
-            crossOrigin: "anonymous",
-          },
-          (err: Error, elem: HTMLVideoElement | HTMLAudioElement) => {
-            if (err) {
-              setError(`Failed to load media: ${err.message}`);
-              setIsLoading(false);
-              return;
-            }
-
+        file.webTorrentFile.getBlobURL((err: Error | null, url: string) => {
+          if (err) {
+            console.error("Error getting blob URL:", err);
+            setError(`Failed to create stream: ${err.message}`);
             setIsLoading(false);
-
-            const handleLoadedMetadata = () => {
-              setDuration(elem.duration);
-              console.log("Media metadata loaded:", elem.duration);
-            };
-
-            const handleTimeUpdate = () => {
-              setCurrentTime(elem.currentTime);
-              if (elem.buffered) {
-                setBuffered(elem.buffered);
-              }
-            };
-
-            const handleError = (e: Event) => {
-              console.error("Media error:", e);
-              setError(
-                "Failed to play media file. Try waiting for more content to download."
-              );
-            };
-
-            const handleEnded = () => {
-              setIsPlaying(false);
-            };
-
-            const handlePlay = () => {
-              setIsPlaying(true);
-            };
-
-            const handlePause = () => {
-              setIsPlaying(false);
-            };
-
-            const handleLoadStart = () => {
-              console.log("Media loading started");
-            };
-
-            const handleCanPlay = () => {
-              console.log("Media can start playing");
-            };
-
-            const handleWaiting = () => {
-              console.log("Media waiting for data");
-            };
-
-            elem.addEventListener("loadedmetadata", handleLoadedMetadata);
-            elem.addEventListener("timeupdate", handleTimeUpdate);
-            elem.addEventListener("error", handleError);
-            elem.addEventListener("ended", handleEnded);
-            elem.addEventListener("play", handlePlay);
-            elem.addEventListener("pause", handlePause);
-            elem.addEventListener("loadstart", handleLoadStart);
-            elem.addEventListener("canplay", handleCanPlay);
-            elem.addEventListener("waiting", handleWaiting);
-
-            elem.style.width = "100%";
-            elem.style.height = file.type === "video" ? "auto" : "200px";
-            elem.style.backgroundColor = "#000";
-            elem.style.outline = "none";
-
-            if (file.type === "video") {
-              videoRef.current = elem as HTMLVideoElement;
-            } else {
-              audioRef.current = elem as HTMLAudioElement;
-            }
-
-            return () => {
-              elem.removeEventListener("loadedmetadata", handleLoadedMetadata);
-              elem.removeEventListener("timeupdate", handleTimeUpdate);
-              elem.removeEventListener("error", handleError);
-              elem.removeEventListener("ended", handleEnded);
-              elem.removeEventListener("play", handlePlay);
-              elem.removeEventListener("pause", handlePause);
-              elem.removeEventListener("loadstart", handleLoadStart);
-              elem.removeEventListener("canplay", handleCanPlay);
-              elem.removeEventListener("waiting", handleWaiting);
-            };
+            return;
           }
-        );
+
+          console.log("Got blob URL for streaming:", url);
+          setMediaUrl(url);
+          setIsLoading(false);
+        });
       } catch (err) {
+        console.error("Error initializing stream:", err);
         setError(
-          `Failed to stream file: ${
+          `Failed to initialize stream: ${
             err instanceof Error ? err.message : "Unknown error"
           }`
         );
         setIsLoading(false);
       }
+    };
+
+    if (checkStreamReady()) {
+      initializeStream();
+    } else {
+      console.log("Waiting for more data to download before streaming...");
+
+      streamCheckIntervalRef.current = setInterval(() => {
+        if (checkStreamReady()) {
+          clearInterval(streamCheckIntervalRef.current!);
+          initializeStream();
+        }
+      }, 1000);
+
+      setTimeout(() => {
+        if (streamCheckIntervalRef.current) {
+          clearInterval(streamCheckIntervalRef.current);
+          if (file.progress < 0.01) {
+            setError(
+              "Not enough data downloaded to start streaming. Please wait for more content to download."
+            );
+            setIsLoading(false);
+          }
+        }
+      }, 30000);
     }
-  }, [file]);
+
+    return () => {
+      if (streamCheckIntervalRef.current) {
+        clearInterval(streamCheckIntervalRef.current);
+      }
+      if (mediaUrl) {
+        URL.revokeObjectURL(mediaUrl);
+      }
+    };
+  }, [file, mediaUrl]);
 
   useEffect(() => {
     if (file.type === "video") {
@@ -237,62 +187,38 @@ export default function MediaPlayer({
   }, [isPlaying, file.type]);
 
   const togglePlay = () => {
-    const media = mediaRef.current;
-    if (!media) return;
-
-    if (isPlaying) {
-      media.pause();
-    } else {
-      const playPromise = media.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((error) => {
-          console.error("Play failed:", error);
-          setError(
-            "Playback failed. The file may not be ready for streaming yet."
-          );
-        });
-      }
-    }
+    setIsPlaying(!isPlaying);
   };
 
   const toggleMute = () => {
-    const media = mediaRef.current;
-    if (!media) return;
-
-    media.muted = !isMuted;
     setIsMuted(!isMuted);
   };
 
   const handleVolumeChange = (newVolume: number) => {
-    const media = mediaRef.current;
-    if (!media) return;
-
-    media.volume = newVolume;
     setVolume(newVolume);
     setIsMuted(newVolume === 0);
   };
 
   const handleSeek = (newTime: number) => {
-    const media = mediaRef.current;
-    if (!media) return;
-
-    media.currentTime = newTime;
-    setCurrentTime(newTime);
+    if (playerRef.current) {
+      playerRef.current.seekTo(newTime, "seconds");
+    }
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     if (!containerRef.current) return;
 
-    if (!isFullscreen) {
-      if (containerRef.current.requestFullscreen) {
-        containerRef.current.requestFullscreen();
+    try {
+      if (!isFullscreen) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
       }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
+    } catch (error) {
+      console.error("Fullscreen toggle failed:", error);
     }
-    setIsFullscreen(!isFullscreen);
   };
 
   const formatTime = (seconds: number) => {
@@ -303,25 +229,54 @@ export default function MediaPlayer({
   };
 
   const skip = (seconds: number) => {
-    const media = mediaRef.current;
-    if (!media) return;
-
     const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
     handleSeek(newTime);
   };
 
-  const getBufferedPercentage = () => {
-    if (!buffered || !duration) return 0;
-
-    let bufferedAmount = 0;
-    for (let i = 0; i < buffered.length; i++) {
-      if (buffered.start(i) <= currentTime && currentTime <= buffered.end(i)) {
-        bufferedAmount = buffered.end(i);
-        break;
-      }
+  const retryStream = () => {
+    setError(null);
+    setIsLoading(true);
+    if (mediaUrl) {
+      URL.revokeObjectURL(mediaUrl);
+      setMediaUrl(null);
     }
+  };
 
-    return (bufferedAmount / duration) * 100;
+  const handlePlayerReady = () => {
+    console.log("ReactPlayer ready");
+    setIsLoading(false);
+  };
+
+  const handlePlayerError = (error: any) => {
+    console.error("ReactPlayer error:", error);
+    setError(`Playback error: ${error?.message || "Unknown error"}`);
+    setIsLoading(false);
+  };
+
+  const handleProgress = (state: {
+    played: number;
+    playedSeconds: number;
+    loaded: number;
+    loadedSeconds: number;
+  }) => {
+    setCurrentTime(state.playedSeconds);
+    setBuffered(state.loaded * 100);
+  };
+
+  const handleDuration = (duration: number) => {
+    setDuration(duration);
+  };
+
+  const handlePlay = () => {
+    setIsPlaying(true);
+  };
+
+  const handlePause = () => {
+    setIsPlaying(false);
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
   };
 
   return (
@@ -362,11 +317,27 @@ export default function MediaPlayer({
         </div>
 
         <div className="relative bg-black flex-1 flex items-center justify-center">
-          <div
-            ref={mediaContainerRef}
-            className="w-full h-full flex items-center justify-center"
-          >
-            {file.type === "audio" && !isLoading && !error && (
+          {mediaUrl && !error && !isLoading && (
+            <ReactPlayer
+              ref={playerRef}
+              url={mediaUrl}
+              playing={isPlaying}
+              volume={isMuted ? 0 : volume}
+              width="100%"
+              height={file.type === "video" ? "100%" : "200px"}
+              controls={false}
+              onReady={handlePlayerReady}
+              onError={handlePlayerError}
+              onProgress={handleProgress as any}
+              onDuration={handleDuration}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onEnded={handleEnded}
+            />
+          )}
+
+          {file.type === "audio" && mediaUrl && !isLoading && !error && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center p-8">
                 <div className="w-24 h-24 bg-gradient-to-br from-emerald-500/20 to-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-gray-600">
                   <Volume2 className="w-12 h-12 text-white" />
@@ -376,8 +347,8 @@ export default function MediaPlayer({
                 </p>
                 <p className="text-gray-400">Audio File</p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {(isLoading || error) && (
             <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
@@ -385,12 +356,14 @@ export default function MediaPlayer({
                 <div className="text-white text-center p-8">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-4"></div>
                   <p className="text-xl font-semibold mb-2">
-                    Loading media stream...
+                    Preparing media stream...
                   </p>
                   <div className="text-gray-300 space-y-1">
                     <p>Downloaded: {Math.round(file.progress * 100)}%</p>
                     <p className="text-sm">
-                      Waiting for sufficient data to start playback...
+                      {file.progress < 0.01
+                        ? "Waiting for sufficient data to start streaming..."
+                        : "Creating media stream..."}
                     </p>
                   </div>
                   <div className="mt-4">
@@ -409,12 +382,12 @@ export default function MediaPlayer({
                     {error}
                   </p>
                   <p className="text-gray-400 text-sm mb-4">
-                    {file.progress < 0.1
+                    {file.progress < 0.01
                       ? "Wait for more content to download before streaming"
                       : "Try refreshing the stream or check if the file format is supported"}
                   </p>
                   <Button
-                    onClick={() => window.location.reload()}
+                    onClick={retryStream}
                     variant="outline"
                     className="border-red-500/50 text-red-400 hover:bg-red-500/10"
                   >
@@ -450,7 +423,7 @@ export default function MediaPlayer({
             >
               <div
                 className="absolute inset-y-0 left-0 bg-gray-600 rounded-full transition-all duration-200"
-                style={{ width: `${getBufferedPercentage()}%` }}
+                style={{ width: `${buffered}%` }}
               />
               <div
                 className="absolute inset-y-0 left-0 bg-emerald-500 rounded-full transition-all duration-100"
@@ -476,7 +449,7 @@ export default function MediaPlayer({
                 variant="ghost"
                 size="lg"
                 onClick={togglePlay}
-                disabled={isLoading}
+                disabled={isLoading || !mediaUrl}
                 className="bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/50"
               >
                 {isPlaying ? (
