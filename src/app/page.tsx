@@ -32,12 +32,6 @@ import {
   ShieldOff,
   AlertTriangle,
   CheckCircle2,
-  Upload,
-  Clock,
-  TrendingUp,
-  Database,
-  Network,
-  Cpu,
 } from "lucide-react";
 import TorrentUpload from "@/components/torrent-upload";
 import TorrentDetails from "@/components/torrent-details";
@@ -59,42 +53,7 @@ declare global {
   }
 }
 
-// Modern Stats Card Component
-const StatsCard = ({
-  icon: Icon,
-  label,
-  value,
-  subtext,
-  gradient,
-  pulse = false,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  subtext?: string;
-  gradient: string;
-  pulse?: boolean;
-}) => (
-  <div className="glass-card p-6 rounded-2xl group hover:scale-105 transition-all duration-300">
-    <div className="flex items-center justify-between mb-4">
-      <div
-        className={`p-3 rounded-xl ${gradient} shadow-lg group-hover:shadow-glow transition-all duration-300`}
-      >
-        <Icon className="w-6 h-6 text-white" />
-      </div>
-      {pulse && (
-        <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
-      )}
-    </div>
-    <div className="space-y-1">
-      <h3 className="text-2xl font-bold text-white">{value}</h3>
-      <p className="text-gray-400 text-sm font-medium">{label}</p>
-      {subtext && <p className="text-gray-500 text-xs">{subtext}</p>}
-    </div>
-  </div>
-);
-
-// Enhanced Tracker Status Component
+// Tracker Status Component
 const TrackerStatusDisplay = ({
   trackerInfo,
   boostMode,
@@ -107,99 +66,84 @@ const TrackerStatusDisplay = ({
     totalTrackers > 0 ? (trackerInfo.totalActive / totalTrackers) * 100 : 0;
 
   return (
-    <div className="glass-card p-6 rounded-2xl border border-white/10">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <div
-              className={`p-3 rounded-xl ${
-                trackerInfo.totalActive > 0
-                  ? "bg-gradient-to-r from-emerald-500 to-emerald-600"
-                  : "bg-gradient-to-r from-gray-500 to-gray-600"
-              } shadow-lg`}
-            >
-              {trackerInfo.totalActive > 0 ? (
-                <Signal className="w-6 h-6 text-white" />
-              ) : (
-                <WifiOff className="w-6 h-6 text-white" />
-              )}
-            </div>
-            {trackerInfo.totalActive > 0 && (
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-400 rounded-full animate-pulse shadow-glow-success"></div>
-            )}
-            {boostMode && (
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center">
-                <Zap className="w-2 h-2 text-white" />
-              </div>
-            )}
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-white">Tracker Network</h3>
-            <p className="text-gray-400 text-sm">Connection Status</p>
-          </div>
+    <div
+      className={`flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-gray-800/50 to-gray-900/50 border ${
+        boostMode ? "border-orange-500/50" : "border-gray-600/50"
+      }`}
+    >
+      <div className="relative">
+        <div
+          className={`p-2 rounded-lg ${
+            trackerInfo.totalActive > 0 ? "bg-emerald-500/20" : "bg-gray-500/20"
+          }`}
+        >
+          {trackerInfo.totalActive > 0 ? (
+            <Signal className="w-5 h-5 text-emerald-400" />
+          ) : (
+            <WifiOff className="w-5 h-5 text-gray-400" />
+          )}
         </div>
+        {trackerInfo.totalActive > 0 && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+        )}
         {boostMode && (
-          <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 px-3 py-1">
-            <Zap className="w-3 h-3 mr-1" />
-            BOOST ACTIVE
-          </Badge>
+          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-orange-500 rounded-full">
+            <Zap className="w-2 h-2 text-white" />
+          </div>
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="text-center p-4 rounded-xl bg-white/5 border border-white/10">
-          <div className="text-2xl font-bold text-emerald-400 mb-1">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-white font-bold text-lg">
             {trackerInfo.totalActive}
-          </div>
-          <div className="text-gray-400 text-sm">Active</div>
-        </div>
-        <div className="text-center p-4 rounded-xl bg-white/5 border border-white/10">
-          <div className="text-2xl font-bold text-purple-400 mb-1">
-            {totalTrackers}
-          </div>
-          <div className="text-gray-400 text-sm">Total</div>
-        </div>
-        <div className="text-center p-4 rounded-xl bg-white/5 border border-white/10">
-          <div className="text-2xl font-bold text-cyan-400 mb-1">
+          </span>
+          <span className="text-gray-400 text-sm font-medium">
+            / {totalTrackers} Active
+          </span>
+          <div
+            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+              activePercentage > 50
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                : activePercentage > 0
+                ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+                : "bg-gray-500/20 text-gray-400 border border-gray-500/30"
+            }`}
+          >
             {activePercentage.toFixed(0)}%
           </div>
-          <div className="text-gray-400 text-sm">Uptime</div>
+          {boostMode && (
+            <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+              <Zap className="w-2 h-2 mr-1" />
+              BOOST
+            </Badge>
+          )}
         </div>
-      </div>
 
-      <div className="space-y-3">
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-gray-400 flex items-center">
-            <Globe className="w-4 h-4 mr-2" />
-            External Trackers
+        <div className="flex items-center gap-4 text-xs text-gray-400">
+          <span className="flex items-center gap-1">
+            <Globe className="w-3 h-3" />
+            Ext: {trackerInfo.external.active}/{trackerInfo.external.total}
           </span>
-          <span className="text-white font-medium">
-            {trackerInfo.external.active}/{trackerInfo.external.total}
-          </span>
-        </div>
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-gray-400 flex items-center">
-            <Wifi className="w-4 h-4 mr-2" />
-            Internal Trackers
-          </span>
-          <span className="text-white font-medium">
-            {trackerInfo.internal.active}/{trackerInfo.internal.total}
+          <span className="flex items-center gap-1">
+            <Wifi className="w-3 h-3" />
+            Int: {trackerInfo.internal.active}/{trackerInfo.internal.total}
           </span>
         </div>
-      </div>
 
-      <div className="mt-4">
-        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              activePercentage > 50
-                ? "bg-gradient-to-r from-emerald-400 to-emerald-500"
-                : activePercentage > 0
-                ? "bg-gradient-to-r from-yellow-400 to-yellow-500"
-                : "bg-gradient-to-r from-gray-400 to-gray-500"
-            }`}
-            style={{ width: `${Math.max(activePercentage, 2)}%` }}
-          />
+        <div className="mt-2">
+          <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                activePercentage > 50
+                  ? "bg-emerald-500"
+                  : activePercentage > 0
+                  ? "bg-yellow-500"
+                  : "bg-gray-500"
+              }`}
+              style={{ width: `${Math.max(activePercentage, 2)}%` }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -249,16 +193,17 @@ export default function TorrentClient() {
   const clientRef = useRef<any>(null);
   const updateIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const trackerService = useRef<TrackerService>(TrackerService.getInstance());
+
+  // Store original speed limits before applying pause throttling
   const originalSpeedLimitsRef = useRef<
     Map<string, { download: number; upload: number }>
   >(new Map());
 
-  const PAUSE_THROTTLE_DOWNLOAD = 1;
-  const PAUSE_THROTTLE_UPLOAD = 1;
+  // Constants for pause throttling (very low speeds to simulate pause)
+  const PAUSE_THROTTLE_DOWNLOAD = 1; // 1 KB/s - extremely slow but not zero
+  const PAUSE_THROTTLE_UPLOAD = 1; // 1 KB/s
 
-  // ... [All the existing business logic methods remain exactly the same] ...
-  // I'll include all the original methods here for completeness
-
+  // Validate magnet URL in real-time
   useEffect(() => {
     if (magnetUrl.trim()) {
       const isValid = trackerService.current.validateMagnetUrl(magnetUrl);
@@ -273,6 +218,7 @@ export default function TorrentClient() {
     }
   }, [magnetUrl]);
 
+  // Initialize trackers on app load
   useEffect(() => {
     const initializeTrackers = async () => {
       try {
@@ -345,9 +291,6 @@ export default function TorrentClient() {
     };
   }, []);
 
-  // [All other business logic methods would go here - keeping them exactly the same]
-  // ... applySpeedLimits, handleBoostModeToggle, etc. ...
-
   const applySpeedLimits = () => {
     if (!clientRef.current) return;
 
@@ -384,6 +327,182 @@ export default function TorrentClient() {
     }
   };
 
+  // Apply individual torrent throttling for pause/resume functionality
+  const applyTorrentThrottling = (
+    torrent: any,
+    downloadKB: number,
+    uploadKB: number
+  ) => {
+    try {
+      const downloadBytes = downloadKB > 0 ? downloadKB * 1000 : -1;
+      const uploadBytes = uploadKB > 0 ? uploadKB * 1000 : -1;
+
+      // WebTorrent doesn't have per-torrent throttling, so we'll use the global client throttling
+      // This is a limitation, but it's the best we can do with the current WebTorrent API
+      if (clientRef.current.throttleDownload) {
+        clientRef.current.throttleDownload(downloadBytes);
+      }
+      if (clientRef.current.throttleUpload) {
+        clientRef.current.throttleUpload(uploadBytes);
+      }
+
+      console.log(
+        `Applied throttling to torrent ${torrent.name}: ${downloadKB}KB/s down, ${uploadKB}KB/s up`
+      );
+    } catch (error) {
+      console.error("Failed to apply torrent throttling:", error);
+    }
+  };
+
+  const handleBoostModeToggle = async () => {
+    if (!boostMode.enabled && !boostMode.warningAccepted) {
+      // Show warning dialog for first time
+      setBoostMode((prev) => ({ ...prev, showWarning: true }));
+    } else if (boostMode.enabled) {
+      // Disable boost mode
+      setBoostMode({
+        enabled: false,
+        warningAccepted: false,
+        showWarning: false,
+      });
+      console.log("Boost mode disabled");
+    } else {
+      // Enable boost mode (warning already accepted)
+      await enableBoostMode();
+    }
+  };
+
+  const enableBoostMode = async () => {
+    try {
+      setBoostMode((prev) => ({ ...prev, enabled: true, showWarning: false }));
+
+      // Fetch updated tracker stats including unsafe ones
+      const allTrackers =
+        await trackerService.current.getAllTrackersIncludingUnsafe();
+      const newStats = {
+        ...trackerStats,
+        httpCount: allTrackers.http?.length || 0,
+        wsCount: allTrackers.ws?.length || 0,
+        unsafeCount:
+          (allTrackers.http?.length || 0) + (allTrackers.ws?.length || 0),
+        totalCount:
+          trackerStats.safeCount +
+          (allTrackers.http?.length || 0) +
+          (allTrackers.ws?.length || 0),
+      };
+      setTrackerStats(newStats);
+
+      console.log(
+        "Boost mode enabled with",
+        newStats.unsafeCount,
+        "additional unsafe trackers"
+      );
+    } catch (error) {
+      console.error("Failed to enable boost mode:", error);
+      setError("Failed to enable boost mode. Using safe trackers only.");
+    }
+  };
+
+  const handleBoostWarningAccept = async () => {
+    setBoostMode((prev) => ({ ...prev, warningAccepted: true }));
+    await enableBoostMode();
+  };
+
+  const handleBoostWarningCancel = () => {
+    setBoostMode((prev) => ({ ...prev, showWarning: false }));
+  };
+
+  const boostExistingTorrent = async (torrent: TorrentInfo) => {
+    if (!torrent.webTorrentInstance) {
+      console.warn("Cannot boost torrent: WebTorrent instance not available");
+      return;
+    }
+
+    try {
+      const addedCount = await trackerService.current.addTrackersToTorrent(
+        torrent.webTorrentInstance,
+        boostMode.enabled
+      );
+
+      if (addedCount > 0) {
+        // Update torrent info to reflect boost mode
+        setTorrents((prev) =>
+          prev.map((t) =>
+            t.infoHash === torrent.infoHash
+              ? { ...t, boostMode: boostMode.enabled }
+              : t
+          )
+        );
+
+        if (selectedTorrent?.infoHash === torrent.infoHash) {
+          setSelectedTorrent((prev) =>
+            prev ? { ...prev, boostMode: boostMode.enabled } : prev
+          );
+        }
+
+        console.log(
+          `Boosted torrent "${torrent.name}" with ${addedCount} additional trackers`
+        );
+      } else {
+        console.log(
+          `No additional trackers added to torrent "${torrent.name}"`
+        );
+      }
+    } catch (error) {
+      console.error("Failed to boost existing torrent:", error);
+    }
+  };
+
+  const refreshTrackers = async () => {
+    setIsRefreshingTrackers(true);
+    try {
+      console.log("Refreshing trackers...");
+      await trackerService.current.refreshTrackers();
+
+      let newStats = trackerService.current.getStats();
+
+      // If boost mode is enabled, also fetch unsafe tracker counts
+      if (boostMode.enabled) {
+        const allTrackers =
+          await trackerService.current.getAllTrackersIncludingUnsafe();
+        newStats = {
+          ...newStats,
+          httpCount: allTrackers.http?.length || 0,
+          wsCount: allTrackers.ws?.length || 0,
+          unsafeCount:
+            (allTrackers.http?.length || 0) + (allTrackers.ws?.length || 0),
+          totalCount:
+            newStats.safeCount +
+            (allTrackers.http?.length || 0) +
+            (allTrackers.ws?.length || 0),
+        };
+      }
+
+      setTrackerStats(newStats);
+      console.log("Trackers refreshed successfully");
+    } catch (error) {
+      console.error("Failed to refresh trackers:", error);
+      setError(
+        "Failed to refresh trackers. Using cached or fallback trackers."
+      );
+    } finally {
+      setIsRefreshingTrackers(false);
+    }
+  };
+
+  const getFileType = (filename: string): TorrentFile["type"] => {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    if (["mp4", "webm", "mkv", "avi", "mov", "m4v", "3gp"].includes(ext || ""))
+      return "video";
+    if (["mp3", "wav", "flac", "ogg", "m4a", "aac", "wma"].includes(ext || ""))
+      return "audio";
+    if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext || ""))
+      return "image";
+    if (["pdf", "txt", "doc", "docx", "epub", "mobi"].includes(ext || ""))
+      return "document";
+    return "other";
+  };
+
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return "0 B";
     const k = 1000;
@@ -409,7 +528,455 @@ export default function TorrentClient() {
     return `${minutes}m ${secs}s`;
   };
 
-  // [Include all other business logic methods here...]
+  const calculateTimeRemaining = (torrent: any): number => {
+    if (!torrent || torrent.done || torrent.paused) return 0;
+
+    const remainingBytes = torrent.length - torrent.downloaded;
+    const downloadSpeed = torrent.downloadSpeed;
+
+    if (downloadSpeed === 0 || remainingBytes <= 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return remainingBytes / downloadSpeed;
+  };
+
+  // Helper function to analyze tracker activity
+  const analyzeTrackerActivity = (
+    torrent: any,
+    externalTrackers: string[]
+  ): TrackerInfo => {
+    const internalTrackers = torrent.announce || [];
+
+    // For WebTorrent, we'll simulate active tracker detection based on peer count
+    // In a real implementation, you'd check torrent._trackers or similar internal state
+    const hasActivePeers = torrent.numPeers > 0;
+    const peerSources = Math.min(
+      Math.ceil(torrent.numPeers / 5),
+      internalTrackers.length + externalTrackers.length
+    );
+
+    // Simulate which trackers are active based on peer availability
+    const activeExternal = hasActivePeers
+      ? Math.min(Math.ceil(externalTrackers.length * 0.3), peerSources)
+      : 0;
+    const activeInternal = hasActivePeers
+      ? Math.min(
+          Math.ceil(internalTrackers.length * 0.4),
+          peerSources - activeExternal
+        )
+      : 0;
+
+    return {
+      external: {
+        total: externalTrackers.length,
+        active: activeExternal,
+        trackers: externalTrackers,
+      },
+      internal: {
+        total: internalTrackers.length,
+        active: activeInternal,
+        trackers: internalTrackers,
+      },
+      totalActive: activeExternal + activeInternal,
+      lastUpdated: new Date(),
+    };
+  };
+
+  const downloadFile = (file: any, filename: string) => {
+    try {
+      file.getBlobURL((err: Error, url: string) => {
+        if (err) {
+          console.error("Error getting blob URL:", err);
+          return;
+        }
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      });
+    } catch (error) {
+      console.error("Error downloading file:", error);
+    }
+  };
+
+  const downloadAllFiles = (torrent: any) => {
+    torrent.files.forEach((file: any) => {
+      downloadFile(file, file.name);
+    });
+  };
+
+  const pauseTorrent = (torrent: TorrentInfo) => {
+    if (torrent.webTorrentInstance && !torrent.paused) {
+      const infoHash = torrent.infoHash;
+
+      // Store current speed limits before applying pause throttling
+      const currentDownload = speedLimits.download || 0;
+      const currentUpload = speedLimits.upload || 0;
+      originalSpeedLimitsRef.current.set(infoHash, {
+        download: currentDownload,
+        upload: currentUpload,
+      });
+
+      // Apply extreme throttling to simulate pause
+      applyTorrentThrottling(
+        torrent.webTorrentInstance,
+        PAUSE_THROTTLE_DOWNLOAD,
+        PAUSE_THROTTLE_UPLOAD
+      );
+
+      // Update torrent state to paused immediately
+      setTorrents((prev) =>
+        prev.map((t) => (t.infoHash === infoHash ? { ...t, paused: true } : t))
+      );
+
+      setSelectedTorrent((prev) =>
+        prev?.infoHash === infoHash ? { ...prev, paused: true } : prev
+      );
+
+      console.log(
+        `Torrent paused (throttled to ${PAUSE_THROTTLE_DOWNLOAD}KB/s):`,
+        torrent.name
+      );
+    }
+  };
+
+  const resumeTorrent = (torrent: TorrentInfo) => {
+    if (torrent.webTorrentInstance && torrent.paused) {
+      const infoHash = torrent.infoHash;
+
+      // Restore original speed limits or use global limits
+      const originalLimits = originalSpeedLimitsRef.current.get(infoHash);
+      const downloadLimit =
+        originalLimits?.download || speedLimits.download || 0;
+      const uploadLimit = originalLimits?.upload || speedLimits.upload || 0;
+
+      // Apply restored speed limits (0 means unlimited)
+      applyTorrentThrottling(
+        torrent.webTorrentInstance,
+        downloadLimit,
+        uploadLimit
+      );
+
+      // Clean up stored original limits
+      originalSpeedLimitsRef.current.delete(infoHash);
+
+      // Update torrent state to resumed immediately
+      setTorrents((prev) =>
+        prev.map((t) => (t.infoHash === infoHash ? { ...t, paused: false } : t))
+      );
+
+      setSelectedTorrent((prev) =>
+        prev?.infoHash === infoHash ? { ...prev, paused: false } : prev
+      );
+
+      console.log(
+        `Torrent resumed (restored to ${downloadLimit || "unlimited"}KB/s):`,
+        torrent.name
+      );
+    }
+  };
+
+  const deleteTorrent = (torrent: TorrentInfo) => {
+    if (torrent.webTorrentInstance) {
+      // Clean up original speed limits tracking
+      originalSpeedLimitsRef.current.delete(torrent.infoHash);
+
+      // Remove torrent from WebTorrent client
+      clientRef.current.remove(torrent.webTorrentInstance);
+
+      // Clear update interval
+      const interval = updateIntervalsRef.current.get(torrent.infoHash);
+      if (interval) {
+        clearInterval(interval);
+        updateIntervalsRef.current.delete(torrent.infoHash);
+      }
+
+      // Remove from state
+      setTorrents((prev) =>
+        prev.filter((t) => t.infoHash !== torrent.infoHash)
+      );
+
+      // Clear selection if this torrent was selected
+      if (selectedTorrent?.infoHash === torrent.infoHash) {
+        setSelectedTorrent(null);
+      }
+
+      // Remove from completed set
+      setCompletedTorrents((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(torrent.infoHash);
+        return newSet;
+      });
+
+      // Restore global speed limits if no other torrents are paused
+      const remainingTorrents = torrents.filter(
+        (t) => t.infoHash !== torrent.infoHash
+      );
+      const hasActivePausedTorrents = remainingTorrents.some((t) => t.paused);
+
+      if (!hasActivePausedTorrents) {
+        applySpeedLimits(); // Restore global limits
+      }
+
+      console.log("Torrent deleted:", torrent.name);
+    }
+  };
+
+  const updateTorrentState = (
+    infoHash: string,
+    updates: Partial<TorrentInfo>
+  ) => {
+    setTorrents((prev) =>
+      prev.map((t) => (t.infoHash === infoHash ? { ...t, ...updates } : t))
+    );
+
+    setSelectedTorrent((prevSelected) => {
+      if (prevSelected?.infoHash === infoHash) {
+        return { ...prevSelected, ...updates };
+      }
+      return prevSelected;
+    });
+  };
+
+  const addTorrent = async (torrentId: string | File) => {
+    if (!clientRef.current) {
+      setError("WebTorrent client not initialized");
+      setIsTorrentLoading(false);
+      return;
+    }
+
+    setError(null);
+
+    const timeoutId = setTimeout(() => {
+      setIsTorrentLoading(false);
+      setError(
+        "Connection timeout. Please check if the torrent has active seeders or try a different torrent."
+      );
+    }, 120000);
+
+    try {
+      let source = torrentId;
+      let additionalTrackers: string[] = [];
+
+      // Get external trackers (safe or all based on boost mode)
+      try {
+        additionalTrackers = await trackerService.current.getAllTrackersFlat(
+          boostMode.enabled
+        );
+        console.log(
+          `Fetched ${
+            additionalTrackers.length
+          } external trackers for enhanced peer discovery ${
+            boostMode.enabled ? "(including unsafe)" : "(safe only)"
+          }`
+        );
+      } catch (error) {
+        console.warn(
+          "Failed to fetch external trackers, proceeding with original source:",
+          error
+        );
+      }
+
+      // For magnet URLs, append trackers to the URL itself
+      if (typeof torrentId === "string") {
+        source = await trackerService.current.appendTrackersToMagnet(
+          torrentId,
+          boostMode.enabled
+        );
+        console.log(
+          `Enhanced magnet URL with external trackers ${
+            boostMode.enabled ? "(including unsafe)" : "(safe only)"
+          }`
+        );
+      }
+
+      // For both magnet URLs and .torrent files, pass additional trackers via options
+      const torrentOptions = {
+        strategy: "sequential" as const,
+        maxWebConns: 4,
+        path: undefined,
+        announce:
+          additionalTrackers.length > 0 ? additionalTrackers : undefined,
+      };
+
+      const torrent = clientRef.current.add(source, torrentOptions);
+
+      console.log(
+        `Torrent added: ${torrent.name || torrent.infoHash} with ${
+          additionalTrackers.length
+        } additional trackers ${boostMode.enabled ? "(boost mode)" : ""}`
+      );
+
+      torrent.on("metadata", () => {
+        console.log("Metadata received for:", torrent.name);
+        clearTimeout(timeoutId);
+
+        // Initialize tracker info
+        const initialTrackerInfo = analyzeTrackerActivity(
+          torrent,
+          additionalTrackers
+        );
+
+        const torrentInfo: TorrentInfo = {
+          name: torrent.name,
+          infoHash: torrent.infoHash,
+          magnetURI: torrent.magnetURI,
+          length: torrent.length,
+          files: torrent.files.map((file: any) => ({
+            name: file.name,
+            length: file.length,
+            path: file.path,
+            progress: 0,
+            downloaded: 0,
+            type: getFileType(file.name),
+            webTorrentFile: file,
+          })),
+          progress: 0,
+          downloadSpeed: 0,
+          uploadSpeed: 0,
+          downloaded: 0,
+          uploaded: 0,
+          numPeers: 0,
+          timeRemaining: 0,
+          ready: false,
+          done: false,
+          paused: false,
+          webTorrentInstance: torrent,
+          trackerInfo: initialTrackerInfo,
+          boostMode: boostMode.enabled,
+        };
+
+        setTorrents((prev) => [...prev, torrentInfo]);
+        setSelectedTorrent(torrentInfo);
+        setIsTorrentLoading(false);
+
+        const updateInterval = setInterval(() => {
+          const currentSpeed = torrent.downloadSpeed || 0;
+          const timeRemaining = calculateTimeRemaining(torrent);
+
+          // Update tracker activity analysis
+          const updatedTrackerInfo = analyzeTrackerActivity(
+            torrent,
+            additionalTrackers
+          );
+
+          setTorrents((prev) => {
+            const currentTorrent = prev.find(
+              (t) => t.infoHash === torrent.infoHash
+            );
+            if (!currentTorrent) return prev;
+
+            const updatedInfo: TorrentInfo = {
+              ...currentTorrent,
+              progress: torrent.progress || 0,
+              downloadSpeed: torrent.done ? 0 : currentSpeed,
+              uploadSpeed: torrent.uploadSpeed || 0,
+              downloaded: torrent.downloaded || 0,
+              uploaded: torrent.uploaded || 0,
+              numPeers: torrent.numPeers || 0,
+              timeRemaining: currentTorrent.paused
+                ? Number.POSITIVE_INFINITY
+                : timeRemaining,
+              ready: torrent.ready || false,
+              done: torrent.done || false,
+              // Keep the current paused state from our state management
+              paused: currentTorrent.paused,
+              trackerInfo: updatedTrackerInfo,
+              files: torrent.files.map((file: any, index: number) => ({
+                ...currentTorrent.files[index],
+                progress: file.progress || 0,
+                downloaded: file.downloaded || 0,
+                webTorrentFile: file,
+              })),
+              webTorrentInstance: torrent,
+            };
+
+            return prev.map((t) =>
+              t.infoHash === torrent.infoHash ? updatedInfo : t
+            );
+          });
+
+          setSelectedTorrent((prevSelected) => {
+            if (prevSelected?.infoHash === torrent.infoHash) {
+              return {
+                ...prevSelected,
+                progress: torrent.progress || 0,
+                downloadSpeed: torrent.done ? 0 : currentSpeed,
+                uploadSpeed: torrent.uploadSpeed || 0,
+                downloaded: torrent.downloaded || 0,
+                uploaded: torrent.uploaded || 0,
+                numPeers: torrent.numPeers || 0,
+                timeRemaining: prevSelected?.paused
+                  ? Number.POSITIVE_INFINITY
+                  : timeRemaining,
+                ready: torrent.ready || false,
+                done: torrent.done || false,
+                trackerInfo: updatedTrackerInfo,
+                files: torrent.files.map((file: any, index: number) => ({
+                  ...(prevSelected?.files[index] || {}),
+                  progress: file.progress || 0,
+                  downloaded: file.downloaded || 0,
+                  webTorrentFile: file,
+                })),
+              } as TorrentInfo;
+            }
+            return prevSelected;
+          });
+
+          if (torrent.done && !completedTorrents.has(torrent.infoHash)) {
+            console.log("Torrent completed:", torrent.name);
+            setCompletedTorrents((prev) => new Set(prev).add(torrent.infoHash));
+            clearInterval(updateInterval);
+            updateIntervalsRef.current.delete(torrent.infoHash);
+          }
+        }, 1000);
+
+        updateIntervalsRef.current.set(torrent.infoHash, updateInterval);
+      });
+
+      torrent.on("ready", () => {
+        console.log("Torrent ready:", torrent.name);
+      });
+
+      torrent.on("error", (err: Error) => {
+        console.error("Torrent error:", err);
+        clearTimeout(timeoutId);
+        setError(`Torrent error: ${err.message}`);
+        setIsTorrentLoading(false);
+      });
+
+      torrent.on("warning", (err: Error) => {
+        console.warn("Torrent warning:", err);
+      });
+
+      torrent.on("done", () => {
+        console.log("Download completed:", torrent.name);
+      });
+
+      torrent.on("peer", (addr: string) => {
+        console.log("Connected to peer:", addr);
+      });
+
+      torrent.on("noPeers", (announceType: string) => {
+        console.log("No peers found via", announceType);
+        if (announceType === "tracker") {
+          console.log("Attempting to discover more peers...");
+        }
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(`Failed to add torrent: ${errorMessage}`);
+      console.error("Error adding torrent:", err);
+      setIsTorrentLoading(false);
+    }
+  };
 
   const handleMagnetSubmit = async (
     e: React.FormEvent | React.MouseEvent | React.KeyboardEvent
@@ -423,72 +990,89 @@ export default function TorrentClient() {
 
     if (magnetUrl.trim()) {
       setIsTorrentLoading(true);
-      // Add torrent logic would go here
+      await addTorrent(magnetUrl.trim());
       setMagnetUrl("");
     }
   };
 
-  // Calculate total stats
-  const totalDownloadSpeed = torrents.reduce(
-    (sum, t) => sum + (t.downloadSpeed || 0),
-    0
-  );
-  const totalUploadSpeed = torrents.reduce(
-    (sum, t) => sum + (t.uploadSpeed || 0),
-    0
-  );
-  const totalPeers = torrents.reduce((sum, t) => sum + (t.numPeers || 0), 0);
-  const activeTorrents = torrents.filter((t) => !t.done && !t.paused).length;
+  const handleFileUpload = (file: File) => {
+    setIsTorrentLoading(true);
+    addTorrent(file);
+  };
+
+  const handleDownloadFile = (file: TorrentFile) => {
+    if (file.webTorrentFile) {
+      downloadFile(file.webTorrentFile, file.name);
+    }
+  };
+
+  const handleSpeedLimitChange = (
+    type: "download" | "upload",
+    value: string
+  ) => {
+    const numValue = parseInt(value) || 0;
+    setSpeedLimits((prev) => ({
+      ...prev,
+      [type]: numValue,
+    }));
+  };
+
+  const applySpeedLimitSettings = () => {
+    // Update speed limits and apply to all non-paused torrents
+    applySpeedLimits();
+
+    // Re-apply pause throttling to any currently paused torrents
+    torrents.forEach((torrent) => {
+      if (torrent.paused && torrent.webTorrentInstance) {
+        applyTorrentThrottling(
+          torrent.webTorrentInstance,
+          PAUSE_THROTTLE_DOWNLOAD,
+          PAUSE_THROTTLE_UPLOAD
+        );
+      }
+    });
+
+    setShowSpeedSettings(false);
+  };
 
   if (!webTorrentLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="glass-card p-12 max-w-md text-center rounded-3xl border border-white/20">
-          <div className="w-16 h-16 mx-auto mb-6 relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full animate-pulse"></div>
-            <div className="absolute inset-2 bg-black rounded-full"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Loader className="w-8 h-8 text-purple-400 animate-spin" />
-            </div>
-          </div>
-          <h2 className="text-3xl font-bold text-white mb-4 text-gradient">
-            Initializing Torritory
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black flex items-center justify-center p-4">
+        <Card className="p-12 max-w-md text-center bg-gray-900/90 border-gray-700 shadow-2xl">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-white mb-3">
+            Loading WebTorrent
           </h2>
-          <p className="text-gray-400 text-lg">Loading WebTorrent engine...</p>
-          <div className="mt-6 h-1 bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-purple-500 to-purple-600 animate-pulse"></div>
-          </div>
-        </div>
+          <p className="text-gray-300">Initializing torrent engine...</p>
+        </Card>
       </div>
     );
   }
 
   if (!webTorrentSupported) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="glass-card p-12 max-w-md text-center rounded-3xl border border-red-500/20">
-          <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-glow-danger">
-            <AlertCircle className="w-10 h-10 text-white" />
-          </div>
-          <h2 className="text-3xl font-bold text-white mb-4">
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black flex items-center justify-center p-4">
+        <Card className="p-12 max-w-md text-center bg-gray-900/90 border-gray-700 shadow-2xl">
+          <AlertCircle className="w-20 h-20 text-red-400 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-white mb-3">
             WebRTC Not Supported
           </h2>
-          <p className="text-gray-400 text-lg leading-relaxed">
+          <p className="text-gray-300">
             Your browser doesn&apos;t support WebRTC, which is required for
-            peer-to-peer connections. Please use a modern browser like Chrome,
-            Firefox, or Safari.
+            peer-to-peer connections in WebTorrent. Please use a modern browser
+            like Chrome, Firefox, or Safari.
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black">
       <BoostModeWarning
         isOpen={boostMode.showWarning}
-        onAccept={() => {}} // Will implement these
-        onCancel={() => {}}
+        onAccept={handleBoostWarningAccept}
+        onCancel={handleBoostWarningCancel}
         trackerCounts={{
           safeCount: trackerStats.safeCount,
           unsafeCount: trackerStats.unsafeCount,
@@ -496,45 +1080,36 @@ export default function TorrentClient() {
         }}
       />
 
-      {/* Header */}
-      <div className="border-b border-white/10 bg-black/50 backdrop-blur-lg sticky top-0 z-40">
-        <div className="container mx-auto px-8 py-6">
+      <div className="border-b border-gray-800/50 bg-black/80 backdrop-blur-md">
+        <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-glow animate-pulse-glow">
-                  <Database className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-4xl font-black text-gradient tracking-tight">
-                    Torritory
-                  </h1>
-                  <p className="text-gray-400 text-sm font-medium">
-                    Professional Torrent Management Platform
-                  </p>
-                </div>
-              </div>
+            <div>
+              <h1 className="text-5xl font-black mb-2 tracking-tight bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent h-14">
+                Torritory
+              </h1>
+              <p className="text-gray-400 text-base font-medium">
+                High-performance browser-based torrent client
+              </p>
             </div>
-
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-4">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowSpeedSettings(!showSpeedSettings)}
-                className="glass-card border-purple-500/20 text-purple-300 hover:bg-purple-500/10 hover:text-purple-200 transition-all duration-300"
+                className="border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white transition-all duration-200 h-8.5"
               >
                 <Settings className="w-4 h-4 mr-2" />
-                Speed Control
+                Speed Limits
               </Button>
 
               <Button
                 variant={boostMode.enabled ? "default" : "outline"}
                 size="sm"
-                onClick={() => {}} // Will implement
-                className={`transition-all duration-300 ${
+                onClick={handleBoostModeToggle}
+                className={`transition-all duration-200 h-8.5 ${
                   boostMode.enabled
-                    ? "btn-warning"
-                    : "glass-card border-orange-500/20 text-orange-300 hover:bg-orange-500/10"
+                    ? "bg-orange-600 hover:bg-orange-700 text-white border-orange-500"
+                    : "border-orange-500/70 text-orange-400 hover:bg-orange-500 hover:text-white"
                 }`}
               >
                 {boostMode.enabled ? (
@@ -545,187 +1120,151 @@ export default function TorrentClient() {
                 {boostMode.enabled ? "Disable Boost" : "Boost Mode"}
               </Button>
 
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {}} // Will implement refresh
-                  disabled={isRefreshingTrackers}
-                  className="glass-card border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10 p-2"
+              <div className="flex flex-col gap-1 border rounded-2xl items-center">
+                <Badge
+                  variant="outline"
+                  className="border-blue-500/70 text-blue-400 font-medium px-2 py-0.5 text-xs p-1 pr-1.5"
                 >
-                  {isRefreshingTrackers ? (
-                    <Loader className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                </Button>
-                <Badge className="bg-gradient-to-r from-cyan-500 to-cyan-600 text-white border-0 px-3 py-1">
-                  <Globe className="w-3 h-3 mr-1" />
+                  <Button
+                    variant="ghost"
+                    onClick={refreshTrackers}
+                    disabled={isRefreshingTrackers}
+                    className="text-blue-400 hover:bg-blue-800 hover:text-white transition-all duration-200 h-6 w-6 mr-2 cursor-pointer"
+                  >
+                    {isRefreshingTrackers ? (
+                      <Loader className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                  </Button>
+                  <Globe className="w-3 h-3 mr-0.5" />
                   {boostMode.enabled
                     ? trackerStats.totalCount
-                    : trackerStats.safeCount}{" "}
-                  Trackers
+                    : trackerStats.safeCount}
+                  {boostMode.enabled ? " Total" : " Safe"}
                 </Badge>
               </div>
             </div>
           </div>
 
-          {/* Speed Settings Panel */}
           {showSpeedSettings && (
-            <div className="mt-6 glass-card p-6 rounded-2xl border border-purple-500/20">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-                <Settings className="w-5 h-5 mr-2 text-purple-400" />
-                Speed Limits Configuration
+            <div className="mt-6 p-6 bg-gray-900/80 rounded-xl border border-gray-700">
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Speed Limits
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-3">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Download Limit (KB/s, 0 = unlimited)
                   </label>
                   <Input
                     type="number"
                     value={speedLimits.download}
                     onChange={(e) =>
-                      setSpeedLimits((prev) => ({
-                        ...prev,
-                        download: parseInt(e.target.value) || 0,
-                      }))
+                      handleSpeedLimitChange("download", e.target.value)
                     }
-                    className="glass-card border-purple-500/20 text-white placeholder-gray-400 focus:ring-purple-500/50 focus:border-purple-500/50"
+                    className="bg-gray-800 border-gray-600 text-white"
                     placeholder="0"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-3">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Upload Limit (KB/s, 0 = unlimited)
                   </label>
                   <Input
                     type="number"
                     value={speedLimits.upload}
                     onChange={(e) =>
-                      setSpeedLimits((prev) => ({
-                        ...prev,
-                        upload: parseInt(e.target.value) || 0,
-                      }))
+                      handleSpeedLimitChange("upload", e.target.value)
                     }
-                    className="glass-card border-purple-500/20 text-white placeholder-gray-400 focus:ring-purple-500/50 focus:border-purple-500/50"
+                    className="bg-gray-800 border-gray-600 text-white"
                     placeholder="0"
                   />
                 </div>
               </div>
-              <div className="flex space-x-3 mt-6">
-                <Button
-                  onClick={() => {
-                    applySpeedLimits();
-                    setShowSpeedSettings(false);
-                  }}
-                  className="btn-primary"
-                >
-                  Apply Settings
+              <div className="flex gap-2 mt-4">
+                <Button onClick={applySpeedLimitSettings} size="sm">
+                  Apply
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowSpeedSettings(false)}
-                  className="glass-card border-gray-500/20 text-gray-300"
+                  size="sm"
                 >
                   Cancel
                 </Button>
               </div>
+              <div className="mt-3 p-3 bg-blue-900/20 rounded-lg border border-blue-500/30">
+                <p className="text-sm text-blue-300">
+                  <strong>Note:</strong> Pause functionality uses throttling (
+                  {PAUSE_THROTTLE_DOWNLOAD}KB/s) instead of true pausing due to
+                  WebTorrent limitations. This maintains peer connections while
+                  virtually stopping downloads.
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Boost Mode Alert */}
           {boostMode.enabled && (
-            <Alert className="mt-4 glass-card border-orange-500/20 bg-orange-500/5">
-              <ShieldOff className="h-5 w-5 text-orange-400" />
+            <Alert className="mt-4 bg-orange-950/30 border-orange-500/50">
+              <ShieldOff className="h-4 w-4 text-orange-400" />
               <AlertDescription className="text-orange-200">
                 <strong>Boost Mode Active:</strong> Using{" "}
-                {trackerStats.unsafeCount} additional unsafe trackers alongside{" "}
-                {trackerStats.safeCount} safe trackers for enhanced
-                connectivity.
+                {trackerStats.unsafeCount} additional unsafe trackers (HTTP/WS)
+                alongside {trackerStats.safeCount} safe trackers. Your IP may be
+                exposed to unencrypted tracker servers.
               </AlertDescription>
             </Alert>
+          )}
+
+          {trackerStats.lastFetched && (
+            <div className="mt-4 p-3 bg-transparent rounded-lg border border-gray-700/50">
+              <div className="flex items-center justify-between text-sm text-gray-400">
+                <span>
+                  Trackers: {trackerStats.httpsCount} HTTPS,{" "}
+                  {trackerStats.wssCount} WSS
+                  {boostMode.enabled && (
+                    <>
+                      , {trackerStats.httpCount} HTTP, {trackerStats.wsCount} WS
+                    </>
+                  )}
+                </span>
+                <span>
+                  Last Updated: {trackerStats.lastFetched.toLocaleTimeString()}
+                  {!trackerStats.cached && " (Using cached data)"}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="container mx-auto px-8 py-8">
+      <div className="container mx-auto px-6 py-8">
         {error && (
-          <Alert className="mb-8 glass-card border-red-500/20 bg-red-500/5">
-            <AlertCircle className="h-5 w-5 text-red-400" />
-            <AlertDescription className="text-red-300 text-lg">
+          <Alert className="mb-8 bg-red-950/50 border-red-500/50 shadow-lg">
+            <AlertCircle className="h-5 w-5" />
+            <AlertDescription className="text-red-300 font-medium text-base">
               {error}
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatsCard
-            icon={TrendingUp}
-            label="Download Speed"
-            value={formatBytes(totalDownloadSpeed) + "/s"}
-            subtext={
-              activeTorrents > 0
-                ? `${activeTorrents} active downloads`
-                : "No active downloads"
-            }
-            gradient="bg-gradient-to-r from-emerald-500 to-emerald-600"
-            pulse={totalDownloadSpeed > 0}
-          />
-          <StatsCard
-            icon={Upload}
-            label="Upload Speed"
-            value={formatBytes(totalUploadSpeed) + "/s"}
-            subtext="Contributing to the network"
-            gradient="bg-gradient-to-r from-cyan-500 to-cyan-600"
-            pulse={totalUploadSpeed > 0}
-          />
-          <StatsCard
-            icon={Users}
-            label="Total Peers"
-            value={totalPeers.toString()}
-            subtext={`Connected across ${torrents.length} torrents`}
-            gradient="bg-gradient-to-r from-purple-500 to-purple-600"
-            pulse={totalPeers > 0}
-          />
-          <StatsCard
-            icon={Database}
-            label="Active Torrents"
-            value={torrents.length.toString()}
-            subtext={`${torrents.filter((t) => t.done).length} completed`}
-            gradient="bg-gradient-to-r from-orange-500 to-orange-600"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Left Column - Controls & List */}
-          <div className="xl:col-span-1 space-y-6">
-            {/* Add Torrent Card */}
-            <div className="glass-card p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center space-x-3 mb-6">
-                <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl shadow-glow">
-                  <Zap className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white">
-                    Add New Torrent
-                  </h2>
-                  <p className="text-gray-400 text-sm">
-                    Magnet URL or .torrent file
-                  </p>
-                </div>
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
+          <div className="xl:col-span-2 flex flex-col gap-6">
+            <Card className="p-5 bg-gray-900/90 border-gray-700/50 shadow-xl backdrop-blur-sm">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Zap className="w-5 h-5 mr-2 text-emerald-400" />
+                Add Torrent
                 {boostMode.enabled && (
-                  <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0">
-                    <Zap className="w-3 h-3 mr-1" />
+                  <Badge className="ml-2 bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+                    <Zap className="w-2 h-2 mr-1" />
                     BOOST
                   </Badge>
                 )}
-              </div>
+              </h2>
 
-              <div className="space-y-4">
-                <div className="flex space-x-3">
+              <div className="mb-4">
+                <div className="flex gap-3">
                   <div className="flex-1">
                     <Input
                       type="text"
@@ -737,23 +1276,23 @@ export default function TorrentClient() {
                           handleMagnetSubmit(e);
                         }
                       }}
-                      className={`glass-card border-white/20 text-white placeholder-gray-400 h-12 ${
+                      className={`bg-gray-800/90 border-gray-600 text-white placeholder-gray-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 ${
                         !magnetValidation.isValid && magnetUrl.trim()
-                          ? "border-red-500/50 focus:ring-red-500/50"
-                          : "focus:ring-purple-500/50 focus:border-purple-500/50"
+                          ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                          : ""
                       }`}
                       disabled={isTorrentLoading}
                     />
                     {!magnetValidation.isValid && magnetUrl.trim() && (
-                      <p className="text-red-400 text-xs mt-2 flex items-center">
+                      <p className="text-red-400 text-xs mt-1 flex items-center">
                         <AlertTriangle className="w-3 h-3 mr-1" />
                         {magnetValidation.error}
                       </p>
                     )}
                     {magnetValidation.isValid && magnetUrl.trim() && (
-                      <p className="text-emerald-400 text-xs mt-2 flex items-center">
+                      <p className="text-emerald-400 text-xs mt-1 flex items-center">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Valid magnet URL detected
+                        Valid magnet URL
                       </p>
                     )}
                   </div>
@@ -764,186 +1303,264 @@ export default function TorrentClient() {
                       !magnetValidation.isValid ||
                       isTorrentLoading
                     }
-                    className="btn-primary h-12 px-6"
+                    className="bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 transition-all duration-200 min-w-[48px]"
                   >
-                    {!isTorrentLoading && <Link className="w-5 h-5" />}
+                    {!isTorrentLoading && <Link className="w-4 h-4" />}
                     {isTorrentLoading && (
-                      <Loader className="w-5 h-5 animate-spin" />
+                      <Loader className="w-4 h-4 animate-spin" />
                     )}
                   </Button>
                 </div>
-
                 {isTorrentLoading && (
-                  <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/20">
-                    <p className="text-purple-300 text-sm flex items-center">
-                      <Activity className="w-4 h-4 mr-2 animate-pulse" />
-                      Connecting to swarm with{" "}
-                      {boostMode.enabled
-                        ? trackerStats.totalCount
-                        : trackerStats.safeCount}{" "}
-                      trackers...
-                    </p>
-                    <div className="mt-2 h-1 bg-purple-900/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-purple-500 to-purple-600 animate-pulse"></div>
-                    </div>
-                  </div>
+                  <p className="text-sm text-emerald-400 mt-3 animate-pulse flex items-center">
+                    <Activity className="w-4 h-4 mr-2" />
+                    Connecting to swarm with{" "}
+                    {boostMode.enabled
+                      ? trackerStats.totalCount
+                      : trackerStats.safeCount}
+                    {boostMode.enabled ? " total" : " safe"} trackers...
+                  </p>
                 )}
-
-                <TorrentUpload onFileUpload={() => {}} />
               </div>
-            </div>
 
-            {/* Tracker Status */}
+              <TorrentUpload onFileUpload={handleFileUpload} />
+            </Card>
+
             {selectedTorrent && (
-              <TrackerStatusDisplay
-                trackerInfo={selectedTorrent.trackerInfo}
-                boostMode={selectedTorrent.boostMode || false}
-              />
-            )}
+              <>
+                <Card className="p-5 bg-gray-900/90 border-gray-700/50 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-between">
+                    <span className="flex items-center">
+                      <Activity className="w-5 h-5 mr-2 text-blue-400" />
+                      Tracker Status
+                    </span>
+                  </h2>
 
-            {/* Torrents List */}
-            <div className="glass-card p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-3">
-                  <div className="p-3 bg-gradient-to-r from-cyan-500 to-cyan-600 rounded-xl shadow-glow">
-                    <Activity className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">
+                  <TrackerStatusDisplay
+                    trackerInfo={selectedTorrent.trackerInfo}
+                    boostMode={selectedTorrent.boostMode || false}
+                  />
+                </Card>
+
+                <Card className="flex-1 p-5 bg-gray-900/90 border-gray-700/50 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-between">
+                    <span className="flex items-center">
+                      <Activity className="w-5 h-5 mr-2 text-blue-400" />
                       Active Torrents
-                    </h2>
-                    <p className="text-gray-400 text-sm">
-                      Manage your downloads
-                    </p>
-                  </div>
-                </div>
-                <Badge className="bg-gradient-to-r from-cyan-500 to-cyan-600 text-white border-0 px-3 py-1 text-sm">
-                  {torrents.length}
-                </Badge>
-              </div>
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-gray-300 border-gray-600"
+                    >
+                      {torrents.length}
+                    </Badge>
+                  </h2>
 
-              <ScrollArea className="h-[500px] pr-3">
-                {torrents.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-gray-600 to-gray-700 rounded-2xl flex items-center justify-center">
-                      <HardDrive className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-400 mb-2">
-                      No Active Torrents
-                    </h3>
-                    <p className="text-gray-500">
-                      Add a torrent to begin downloading
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {torrents.map((torrent) => (
-                      <div
-                        key={torrent.infoHash}
-                        className={`p-4 rounded-xl cursor-pointer transition-all duration-300 border ${
-                          selectedTorrent?.infoHash === torrent.infoHash
-                            ? "glass-card border-purple-500/50 bg-purple-500/10 shadow-glow"
-                            : "glass-card border-white/10 hover:border-purple-500/30 hover:bg-purple-500/5"
-                        }`}
-                        onClick={() => setSelectedTorrent(torrent)}
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-base font-semibold text-white truncate pr-2 flex-1">
-                            {torrent.name}
-                          </h3>
-                          <div className="flex space-x-2 flex-shrink-0">
-                            <Badge
-                              className={`text-xs font-medium border-0 ${
-                                torrent.done
-                                  ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
-                                  : torrent.paused
-                                  ? "bg-gradient-to-r from-yellow-500 to-yellow-600 text-white"
-                                  : "bg-gradient-to-r from-blue-500 to-blue-600 text-white"
-                              }`}
-                            >
-                              {torrent.done
-                                ? "Complete"
-                                : torrent.paused
-                                ? "Paused"
-                                : "Downloading"}
-                            </Badge>
-                            {torrent.boostMode && (
-                              <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 text-xs">
-                                <Zap className="w-2 h-2 mr-1" />
-                                BOOST
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="progress-modern h-2 mb-3">
-                          <div
-                            className="progress-bar"
-                            style={{ width: `${torrent.progress * 100}%` }}
-                          />
-                        </div>
-
-                        <div className="flex justify-between items-center text-xs">
-                          <div className="flex items-center space-x-4 text-gray-400">
-                            <span className="font-medium">
-                              {Math.round(torrent.progress * 100)}%
-                            </span>
-                            <span className="flex items-center">
-                              <Download className="w-3 h-3 mr-1" />
-                              {formatBytes(torrent.downloadSpeed)}/s
-                            </span>
-                            <span className="flex items-center">
-                              <Users className="w-3 h-3 mr-1" />
-                              {torrent.numPeers}
-                            </span>
-                          </div>
-                          <span className="text-gray-500 font-medium">
-                            {torrent.paused
-                              ? "Paused"
-                              : formatTime(torrent.timeRemaining)}
-                          </span>
-                        </div>
+                  <ScrollArea className="h-[400px] pr-3">
+                    {torrents.length === 0 ? (
+                      <div className="text-center py-12">
+                        <HardDrive className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+                        <p className="text-gray-500 text-lg">
+                          No active torrents
+                        </p>
+                        <p className="text-gray-600 text-sm mt-2">
+                          Add a torrent to get started
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {torrents.map((torrent) => (
+                          <div
+                            key={torrent.infoHash}
+                            className={`p-4 rounded-xl cursor-pointer transition-all duration-200 border ${
+                              selectedTorrent?.infoHash === torrent.infoHash
+                                ? "bg-emerald-900/30 border-emerald-500/60 shadow-lg shadow-emerald-500/10"
+                                : "bg-gray-800/60 border-gray-700/50 hover:border-emerald-500/30 hover:bg-emerald-900/10"
+                            }`}
+                            onClick={() => setSelectedTorrent(torrent)}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-base font-semibold text-white truncate pr-2 flex-1">
+                                {torrent.name}
+                              </h3>
+                              <div className="flex gap-2 flex-shrink-0">
+                                <Badge
+                                  variant={
+                                    torrent.done
+                                      ? "default"
+                                      : torrent.paused
+                                      ? "secondary"
+                                      : "default"
+                                  }
+                                  className={`text-xs font-medium ${
+                                    torrent.done
+                                      ? "bg-emerald-600/80 text-white border-emerald-500"
+                                      : torrent.paused
+                                      ? "bg-yellow-600/80 text-white border-yellow-500"
+                                      : "bg-blue-600/80 text-white border-blue-500"
+                                  }`}
+                                >
+                                  {torrent.done
+                                    ? "Complete"
+                                    : torrent.paused
+                                    ? "Paused"
+                                    : "Downloading"}
+                                </Badge>
+                                {torrent.boostMode && (
+                                  <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+                                    <Zap className="w-2 h-2 mr-1" />
+                                    BOOST
+                                  </Badge>
+                                )}
+                                <div className="flex gap-1">
+                                  {!torrent.done && !torrent.paused && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        pauseTorrent(torrent);
+                                      }}
+                                      className="h-6 px-2 text-xs border-yellow-500 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all duration-200"
+                                    >
+                                      <Pause className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                  {!torrent.done && torrent.paused && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        resumeTorrent(torrent);
+                                      }}
+                                      className="h-6 px-2 text-xs border-blue-500 text-blue-400 hover:bg-blue-500 hover:text-white transition-all duration-200"
+                                    >
+                                      <Play className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteTorrent(torrent);
+                                    }}
+                                    className="h-6 px-2 text-xs border-red-500 text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+
+                            <Progress
+                              value={torrent.progress * 100}
+                              className={`h-2 mb-2 ${
+                                torrent.done
+                                  ? "[&>div]:bg-emerald-500"
+                                  : torrent.paused
+                                  ? "[&>div]:bg-yellow-500"
+                                  : torrent.progress > 0
+                                  ? "[&>div]:bg-blue-500 [&>div]:animate-pulse"
+                                  : "[&>div]:bg-gray-600"
+                              }`}
+                            />
+
+                            <div className="flex justify-between items-center text-xs mb-2">
+                              <div className="flex items-center gap-4 text-gray-400">
+                                <span className="font-medium">
+                                  {Math.round(torrent.progress * 100)}%
+                                </span>
+                                <span className="flex items-center">
+                                  <Download className="w-3 h-3 mr-1" />
+                                  {torrent.paused
+                                    ? `~${formatBytes(
+                                        PAUSE_THROTTLE_DOWNLOAD * 1000
+                                      )}/s`
+                                    : `${formatBytes(torrent.downloadSpeed)}/s`}
+                                </span>
+                                <span className="flex items-center">
+                                  <Users className="w-3 h-3 mr-1" />
+                                  {torrent.numPeers}
+                                </span>
+                              </div>
+                              <span className="text-gray-500 font-medium">
+                                {torrent.paused
+                                  ? "Paused"
+                                  : formatTime(torrent.timeRemaining)}
+                              </span>
+                            </div>
+
+                            {/* Mini tracker status */}
+                            <div className="flex items-center gap-2 text-xs">
+                              <div className="flex items-center gap-1">
+                                <Signal
+                                  className={`w-3 h-3 ${
+                                    torrent.trackerInfo.totalActive > 0
+                                      ? "text-emerald-400"
+                                      : "text-gray-400"
+                                  }`}
+                                />
+                                <span className="text-gray-400">
+                                  {torrent.trackerInfo.totalActive} active
+                                  trackers
+                                </span>
+                              </div>
+                              <div className="text-gray-500">
+                                ({torrent.trackerInfo.external.active}E +{" "}
+                                {torrent.trackerInfo.internal.active}I)
+                              </div>
+                              {torrent.boostMode && (
+                                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+                                  <Zap className="w-2 h-2 mr-1" />
+                                  BOOST
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </Card>
+              </>
+            )}
           </div>
 
-          {/* Right Column - Details */}
-          <div className="xl:col-span-2">
+          <div className="xl:col-span-3">
             {selectedTorrent ? (
               <TorrentDetails
                 torrent={selectedTorrent}
-                onDownloadFile={() => {}}
-                onPauseTorrent={() => {}}
-                onResumeTorrent={() => {}}
-                onDeleteTorrent={() => {}}
+                onDownloadFile={handleDownloadFile}
+                onPauseTorrent={() => pauseTorrent(selectedTorrent)}
+                onResumeTorrent={() => resumeTorrent(selectedTorrent)}
+                onDeleteTorrent={() => deleteTorrent(selectedTorrent)}
+                onBoostTorrent={
+                  selectedTorrent.boostMode
+                    ? undefined
+                    : () => boostExistingTorrent(selectedTorrent)
+                }
                 formatBytes={formatBytes}
                 formatTime={formatTime}
               />
             ) : (
-              <div className="glass-card p-16 rounded-2xl border border-white/10 text-center min-h-[600px] flex flex-col items-center justify-center">
-                <div className="w-24 h-24 mx-auto mb-8 bg-gradient-to-r from-gray-600 to-gray-700 rounded-3xl flex items-center justify-center animate-float">
-                  <HardDrive className="w-12 h-12 text-gray-400" />
-                </div>
-                <h2 className="text-4xl font-bold text-white mb-4">
-                  Select a Torrent
+              <Card className="p-16 bg-gray-900/90 border-gray-700/50 text-center min-h-[600px] flex flex-col items-center justify-center shadow-xl">
+                <HardDrive className="w-24 h-24 text-gray-600 mx-auto mb-6" />
+                <h2 className="text-3xl font-bold text-white mb-3">
+                  No Torrent Selected
                 </h2>
-                <p className="text-gray-400 text-xl max-w-md leading-relaxed">
-                  Choose a torrent from the list to view detailed information
-                  and manage your download
+                <p className="text-gray-400 text-lg max-w-md">
+                  Add a torrent using a magnet URL or .torrent file to get
+                  started with downloading
                 </p>
                 {boostMode.enabled && (
-                  <div className="mt-6 p-4 bg-orange-500/10 rounded-xl border border-orange-500/20">
-                    <p className="text-orange-400 text-sm">
-                      Boost mode is active - new torrents will use enhanced
-                      tracker discovery
-                    </p>
-                  </div>
+                  <p className="text-orange-400 text-sm max-w-md mt-2">
+                    Boost mode is active - new torrents will use unsafe trackers
+                    for better peer discovery
+                  </p>
                 )}
-              </div>
+              </Card>
             )}
           </div>
         </div>
