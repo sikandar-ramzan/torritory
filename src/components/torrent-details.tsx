@@ -26,6 +26,9 @@ import {
   Play,
   StopCircle,
   Trash2,
+  Zap,
+  Shield,
+  ShieldOff,
 } from "lucide-react";
 import { useState } from "react";
 import { TorrentDetailsProps, TorrentFile } from "@/types";
@@ -36,6 +39,7 @@ export default function TorrentDetails({
   onPauseTorrent,
   onResumeTorrent,
   onDeleteTorrent,
+  onBoostTorrent,
   formatBytes,
   formatTime,
 }: TorrentDetailsProps) {
@@ -122,13 +126,29 @@ export default function TorrentDetails({
   );
 
   return (
-    <Card className="bg-gray-900/90 border-gray-700/50 shadow-2xl backdrop-blur-sm overflow-hidden">
-      <div className="p-6 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/50 to-gray-900/50">
+    <Card
+      className={`bg-gray-900/90 border-gray-700/50 shadow-2xl backdrop-blur-sm overflow-hidden ${
+        torrent.boostMode ? "ring-1 ring-orange-500/30" : ""
+      }`}
+    >
+      <div
+        className={`p-6 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/50 to-gray-900/50 ${
+          torrent.boostMode ? "border-orange-500/20" : ""
+        }`}
+      >
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1 min-w-0">
-            <h2 className="text-2xl font-bold text-white mb-2 leading-tight">
-              {torrent.name}
-            </h2>
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-2xl font-bold text-white leading-tight">
+                {torrent.name}
+              </h2>
+              {torrent.boostMode && (
+                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50">
+                  <Zap className="w-3 h-3 mr-1" />
+                  BOOST MODE
+                </Badge>
+              )}
+            </div>
             <div className="flex items-center gap-3 flex-wrap">
               <Badge
                 variant={
@@ -167,6 +187,17 @@ export default function TorrentDetails({
                 <File className="w-3 h-3 mr-1" />
                 {torrent.files.length} files
               </Badge>
+              {torrent.boostMode ? (
+                <Badge className="bg-orange-500/20 text-orange-300 border-orange-500/50">
+                  <ShieldOff className="w-3 h-3 mr-1" />
+                  Unsafe Trackers Active
+                </Badge>
+              ) : (
+                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/50">
+                  <Shield className="w-3 h-3 mr-1" />
+                  Safe Trackers Only
+                </Badge>
+              )}
             </div>
           </div>
           <div className="flex gap-2 ml-4">
@@ -201,6 +232,7 @@ export default function TorrentDetails({
                 Download All
               </Button>
             )}
+
             <Button
               onClick={onDeleteTorrent}
               variant="outline"
@@ -230,7 +262,9 @@ export default function TorrentDetails({
                 : torrent.paused
                 ? "[&>div]:bg-yellow-500"
                 : torrent.progress > 0
-                ? "[&>div]:bg-blue-500 [&>div]:animate-pulse"
+                ? torrent.boostMode
+                  ? "[&>div]:bg-orange-500 [&>div]:animate-pulse"
+                  : "[&>div]:bg-blue-500 [&>div]:animate-pulse"
                 : "[&>div]:bg-gray-600"
             }`}
           />
@@ -361,7 +395,9 @@ export default function TorrentDetails({
                                     file.progress > 0.8
                                       ? "text-emerald-400"
                                       : file.progress > 0.3
-                                      ? "text-blue-400"
+                                      ? torrent.boostMode
+                                        ? "text-orange-400"
+                                        : "text-blue-400"
                                       : "text-gray-400"
                                   }`}
                                 >
@@ -374,7 +410,9 @@ export default function TorrentDetails({
                                   file.progress > 0.8
                                     ? "[&>div]:bg-emerald-500"
                                     : file.progress > 0.3
-                                    ? "[&>div]:bg-blue-500"
+                                    ? torrent.boostMode
+                                      ? "[&>div]:bg-orange-500"
+                                      : "[&>div]:bg-blue-500"
                                     : file.progress > 0
                                     ? "[&>div]:bg-yellow-500"
                                     : "[&>div]:bg-gray-600"
@@ -412,6 +450,22 @@ export default function TorrentDetails({
 
           <TabsContent value="info" className="mt-6">
             <div className="space-y-6">
+              {torrent.boostMode && (
+                <div className="p-4 rounded-xl bg-orange-950/30 border border-orange-500/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldOff className="w-5 h-5 text-orange-400" />
+                    <span className="text-orange-300 font-semibold">
+                      Boost Mode Active
+                    </span>
+                  </div>
+                  <p className="text-orange-200 text-sm">
+                    This torrent is using both safe (HTTPS/WSS) and unsafe
+                    (HTTP/WS) trackers for enhanced peer discovery. Your IP
+                    address may be exposed to unencrypted tracker servers.
+                  </p>
+                </div>
+              )}
+
               <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
@@ -492,6 +546,50 @@ export default function TorrentDetails({
                   </label>
                   <div className="text-blue-400 font-bold text-xl">
                     {formatBytes(torrent.uploaded || 0)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                <label className="text-sm font-semibold text-gray-400 uppercase tracking-wide block mb-3">
+                  Tracker Status
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-white font-semibold mb-1">
+                      External Trackers
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {torrent.trackerInfo.external.active} active /{" "}
+                      {torrent.trackerInfo.external.total} total
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold mb-1">
+                      Internal Trackers
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {torrent.trackerInfo.internal.active} active /{" "}
+                      {torrent.trackerInfo.internal.total} total
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-700/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-white font-semibold">
+                      Total Active Trackers
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-400 font-bold text-lg">
+                        {torrent.trackerInfo.totalActive}
+                      </span>
+                      {torrent.boostMode && (
+                        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50">
+                          <Zap className="w-2 h-2 mr-1" />
+                          BOOST
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -28,9 +28,14 @@ import {
   Pause,
   Play,
   Trash2,
+  Shield,
+  ShieldOff,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import TorrentUpload from "@/components/torrent-upload";
 import TorrentDetails from "@/components/torrent-details";
+import BoostModeWarning from "@/components/boost-mode-warning";
 import TrackerService from "@/utils/trackerServcie";
 import {
   TorrentFile,
@@ -38,6 +43,8 @@ import {
   TrackerInfo,
   SpeedLimits,
   TrackerStats,
+  BoostModeState,
+  MagnetValidationResult,
 } from "@/types";
 
 declare global {
@@ -49,15 +56,21 @@ declare global {
 // Tracker Status Component
 const TrackerStatusDisplay = ({
   trackerInfo,
+  boostMode,
 }: {
   trackerInfo: TrackerInfo;
+  boostMode: boolean;
 }) => {
   const totalTrackers = trackerInfo.external.total + trackerInfo.internal.total;
   const activePercentage =
     totalTrackers > 0 ? (trackerInfo.totalActive / totalTrackers) * 100 : 0;
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-gray-800/50 to-gray-900/50 border border-gray-600/50">
+    <div
+      className={`flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-gray-800/50 to-gray-900/50 border ${
+        boostMode ? "border-orange-500/50" : "border-gray-600/50"
+      }`}
+    >
       <div className="relative">
         <div
           className={`p-2 rounded-lg ${
@@ -72,6 +85,11 @@ const TrackerStatusDisplay = ({
         </div>
         {trackerInfo.totalActive > 0 && (
           <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+        )}
+        {boostMode && (
+          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-orange-500 rounded-full">
+            <Zap className="w-2 h-2 text-white" />
+          </div>
         )}
       </div>
 
@@ -94,6 +112,12 @@ const TrackerStatusDisplay = ({
           >
             {activePercentage.toFixed(0)}%
           </div>
+          {boostMode && (
+            <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+              <Zap className="w-2 h-2 mr-1" />
+              BOOST
+            </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-4 text-xs text-gray-400">
@@ -132,6 +156,10 @@ export default function TorrentClient() {
     null
   );
   const [magnetUrl, setMagnetUrl] = useState("");
+  const [magnetValidation, setMagnetValidation] =
+    useState<MagnetValidationResult>({
+      isValid: true,
+    });
   const [error, setError] = useState<string | null>(null);
   const [webTorrentSupported, setWebTorrentSupported] = useState(false);
   const [webTorrentLoaded, setWebTorrentLoaded] = useState(false);
@@ -149,9 +177,18 @@ export default function TorrentClient() {
     lastFetched: null,
     httpsCount: 0,
     wssCount: 0,
+    httpCount: 0,
+    wsCount: 0,
     totalCount: 0,
+    safeCount: 0,
+    unsafeCount: 0,
   });
   const [isRefreshingTrackers, setIsRefreshingTrackers] = useState(false);
+  const [boostMode, setBoostMode] = useState<BoostModeState>({
+    enabled: false,
+    warningAccepted: false,
+    showWarning: false,
+  });
 
   const clientRef = useRef<any>(null);
   const updateIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -165,6 +202,21 @@ export default function TorrentClient() {
   // Constants for pause throttling (very low speeds to simulate pause)
   const PAUSE_THROTTLE_DOWNLOAD = 1; // 1 KB/s - extremely slow but not zero
   const PAUSE_THROTTLE_UPLOAD = 1; // 1 KB/s
+
+  // Validate magnet URL in real-time
+  useEffect(() => {
+    if (magnetUrl.trim()) {
+      const isValid = trackerService.current.validateMagnetUrl(magnetUrl);
+      setMagnetValidation({
+        isValid,
+        error: isValid
+          ? undefined
+          : "Invalid magnet URL format. Must start with 'magnet:?xt=urn:btih:' followed by info hash.",
+      });
+    } else {
+      setMagnetValidation({ isValid: true });
+    }
+  }, [magnetUrl]);
 
   // Initialize trackers on app load
   useEffect(() => {
@@ -302,12 +354,131 @@ export default function TorrentClient() {
     }
   };
 
+  const handleBoostModeToggle = async () => {
+    if (!boostMode.enabled && !boostMode.warningAccepted) {
+      // Show warning dialog for first time
+      setBoostMode((prev) => ({ ...prev, showWarning: true }));
+    } else if (boostMode.enabled) {
+      // Disable boost mode
+      setBoostMode({
+        enabled: false,
+        warningAccepted: false,
+        showWarning: false,
+      });
+      console.log("Boost mode disabled");
+    } else {
+      // Enable boost mode (warning already accepted)
+      await enableBoostMode();
+    }
+  };
+
+  const enableBoostMode = async () => {
+    try {
+      setBoostMode((prev) => ({ ...prev, enabled: true, showWarning: false }));
+
+      // Fetch updated tracker stats including unsafe ones
+      const allTrackers =
+        await trackerService.current.getAllTrackersIncludingUnsafe();
+      const newStats = {
+        ...trackerStats,
+        httpCount: allTrackers.http?.length || 0,
+        wsCount: allTrackers.ws?.length || 0,
+        unsafeCount:
+          (allTrackers.http?.length || 0) + (allTrackers.ws?.length || 0),
+        totalCount:
+          trackerStats.safeCount +
+          (allTrackers.http?.length || 0) +
+          (allTrackers.ws?.length || 0),
+      };
+      setTrackerStats(newStats);
+
+      console.log(
+        "Boost mode enabled with",
+        newStats.unsafeCount,
+        "additional unsafe trackers"
+      );
+    } catch (error) {
+      console.error("Failed to enable boost mode:", error);
+      setError("Failed to enable boost mode. Using safe trackers only.");
+    }
+  };
+
+  const handleBoostWarningAccept = async () => {
+    setBoostMode((prev) => ({ ...prev, warningAccepted: true }));
+    await enableBoostMode();
+  };
+
+  const handleBoostWarningCancel = () => {
+    setBoostMode((prev) => ({ ...prev, showWarning: false }));
+  };
+
+  const boostExistingTorrent = async (torrent: TorrentInfo) => {
+    if (!torrent.webTorrentInstance) {
+      console.warn("Cannot boost torrent: WebTorrent instance not available");
+      return;
+    }
+
+    try {
+      const addedCount = await trackerService.current.addTrackersToTorrent(
+        torrent.webTorrentInstance,
+        boostMode.enabled
+      );
+
+      if (addedCount > 0) {
+        // Update torrent info to reflect boost mode
+        setTorrents((prev) =>
+          prev.map((t) =>
+            t.infoHash === torrent.infoHash
+              ? { ...t, boostMode: boostMode.enabled }
+              : t
+          )
+        );
+
+        if (selectedTorrent?.infoHash === torrent.infoHash) {
+          setSelectedTorrent((prev) =>
+            prev ? { ...prev, boostMode: boostMode.enabled } : prev
+          );
+        }
+
+        console.log(
+          `Boosted torrent "${torrent.name}" with ${addedCount} additional trackers`
+        );
+      } else {
+        console.log(
+          `No additional trackers added to torrent "${torrent.name}"`
+        );
+      }
+    } catch (error) {
+      console.error("Failed to boost existing torrent:", error);
+    }
+  };
+
   const refreshTrackers = async () => {
     setIsRefreshingTrackers(true);
     try {
       console.log("Refreshing trackers...");
       await trackerService.current.refreshTrackers();
-      setTrackerStats(trackerService.current.getStats());
+
+      let newStats = trackerService.current.getStats();
+
+      // If boost mode is enabled, also fetch unsafe tracker counts
+      if (boostMode.enabled) {
+        const allTrackers =
+          await trackerService.current.getAllTrackersIncludingUnsafe();
+        newStats = {
+          ...newStats,
+          httpCount: allTrackers.http?.length || 0,
+          wsCount: allTrackers.ws?.length || 0,
+          unsafeCount:
+            (allTrackers.http?.length || 0) + (allTrackers.ws?.length || 0),
+          totalCount:
+            newStats.safeCount +
+            (allTrackers.http?.length || 0) +
+            (allTrackers.ws?.length || 0),
+        };
+      }
+
+      setTrackerStats(newStats);
       console.log("Trackers refreshed successfully");
     } catch (error) {
       console.error("Failed to refresh trackers:", error);
@@ -593,11 +764,17 @@ export default function TorrentClient() {
       let source = torrentId;
       let additionalTrackers: string[] = [];
 
-      // Get external trackers for both magnet URLs and .torrent files
+      // Get external trackers (safe or all based on boost mode)
       try {
-        additionalTrackers = await trackerService.current.getAllTrackers();
+        additionalTrackers = await trackerService.current.getAllTrackersFlat(
+          boostMode.enabled
+        );
         console.log(
-          `Fetched ${additionalTrackers.length} external trackers for enhanced peer discovery`
+          `Fetched ${
+            additionalTrackers.length
+          } external trackers for enhanced peer discovery ${
+            boostMode.enabled ? "(including unsafe)" : "(safe only)"
+          }`
         );
       } catch (error) {
         console.warn(
@@ -608,8 +785,15 @@ export default function TorrentClient() {
 
       // For magnet URLs, append trackers to the URL itself
       if (typeof torrentId === "string") {
-        source = await trackerService.current.appendTrackersToMagnet(torrentId);
-        console.log("Enhanced magnet URL with external trackers");
+        source = await trackerService.current.appendTrackersToMagnet(
+          torrentId,
+          boostMode.enabled
+        );
+        console.log(
+          `Enhanced magnet URL with external trackers ${
+            boostMode.enabled ? "(including unsafe)" : "(safe only)"
+          }`
+        );
       }
 
       // For both magnet URLs and .torrent files, pass additional trackers via options
@@ -626,7 +810,7 @@ export default function TorrentClient() {
       console.log(
         `Torrent added: ${torrent.name || torrent.infoHash} with ${
           additionalTrackers.length
-        } additional trackers`
+        } additional trackers ${boostMode.enabled ? "(boost mode)" : ""}`
       );
 
       torrent.on("metadata", () => {
@@ -665,6 +849,7 @@ export default function TorrentClient() {
           paused: false,
           webTorrentInstance: torrent,
           trackerInfo: initialTrackerInfo,
+          boostMode: boostMode.enabled,
         };
 
         setTorrents((prev) => [...prev, torrentInfo]);
@@ -727,19 +912,19 @@ export default function TorrentClient() {
                 downloaded: torrent.downloaded || 0,
                 uploaded: torrent.uploaded || 0,
                 numPeers: torrent.numPeers || 0,
-                timeRemaining: prevSelected.paused
+                timeRemaining: prevSelected?.paused
                   ? Number.POSITIVE_INFINITY
                   : timeRemaining,
                 ready: torrent.ready || false,
                 done: torrent.done || false,
                 trackerInfo: updatedTrackerInfo,
                 files: torrent.files.map((file: any, index: number) => ({
-                  ...prevSelected.files[index],
+                  ...(prevSelected?.files[index] || {}),
                   progress: file.progress || 0,
                   downloaded: file.downloaded || 0,
                   webTorrentFile: file,
                 })),
-              };
+              } as TorrentInfo;
             }
             return prevSelected;
           });
@@ -797,6 +982,12 @@ export default function TorrentClient() {
     e: React.FormEvent | React.MouseEvent | React.KeyboardEvent
   ) => {
     e.preventDefault();
+
+    if (!magnetValidation.isValid) {
+      setError(magnetValidation.error || "Invalid magnet URL");
+      return;
+    }
+
     if (magnetUrl.trim()) {
       setIsTorrentLoading(true);
       await addTorrent(magnetUrl.trim());
@@ -878,6 +1069,17 @@ export default function TorrentClient() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black">
+      <BoostModeWarning
+        isOpen={boostMode.showWarning}
+        onAccept={handleBoostWarningAccept}
+        onCancel={handleBoostWarningCancel}
+        trackerCounts={{
+          safeCount: trackerStats.safeCount,
+          unsafeCount: trackerStats.unsafeCount,
+          totalCount: trackerStats.safeCount + trackerStats.unsafeCount,
+        }}
+      />
+
       <div className="border-b border-gray-800/50 bg-black/80 backdrop-blur-md">
         <div className="container mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
@@ -900,6 +1102,24 @@ export default function TorrentClient() {
                 Speed Limits
               </Button>
 
+              <Button
+                variant={boostMode.enabled ? "default" : "outline"}
+                size="sm"
+                onClick={handleBoostModeToggle}
+                className={`transition-all duration-200 h-8.5 ${
+                  boostMode.enabled
+                    ? "bg-orange-600 hover:bg-orange-700 text-white border-orange-500"
+                    : "border-orange-500/70 text-orange-400 hover:bg-orange-500 hover:text-white"
+                }`}
+              >
+                {boostMode.enabled ? (
+                  <ShieldOff className="w-4 h-4 mr-2" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-2" />
+                )}
+                {boostMode.enabled ? "Disable Boost" : "Boost Mode"}
+              </Button>
+
               <div className="flex flex-col gap-1 border rounded-2xl items-center">
                 <Badge
                   variant="outline"
@@ -918,7 +1138,10 @@ export default function TorrentClient() {
                     )}
                   </Button>
                   <Globe className="w-3 h-3 mr-0.5" />
-                  {trackerStats.totalCount} External
+                  {boostMode.enabled
+                    ? trackerStats.totalCount
+                    : trackerStats.safeCount}
+                  {boostMode.enabled ? " Total" : " Safe"}
                 </Badge>
               </div>
             </div>
@@ -982,12 +1205,29 @@ export default function TorrentClient() {
             </div>
           )}
 
+          {boostMode.enabled && (
+            <Alert className="mt-4 bg-orange-950/30 border-orange-500/50">
+              <ShieldOff className="h-4 w-4 text-orange-400" />
+              <AlertDescription className="text-orange-200">
+                <strong>Boost Mode Active:</strong> Using{" "}
+                {trackerStats.unsafeCount} additional unsafe trackers (HTTP/WS)
+                alongside {trackerStats.safeCount} safe trackers. Your IP may be
+                exposed to unencrypted tracker servers.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {trackerStats.lastFetched && (
             <div className="mt-4 p-3 bg-transparent rounded-lg border border-gray-700/50">
               <div className="flex items-center justify-between text-sm text-gray-400">
                 <span>
-                  External Trackers: {trackerStats.httpsCount} HTTPS,{" "}
+                  Trackers: {trackerStats.httpsCount} HTTPS,{" "}
                   {trackerStats.wssCount} WSS
+                  {boostMode.enabled && (
+                    <>
+                      , {trackerStats.httpCount} HTTP, {trackerStats.wsCount} WS
+                    </>
+                  )}
                 </span>
                 <span>
                   Last Updated: {trackerStats.lastFetched.toLocaleTimeString()}
@@ -1015,26 +1255,54 @@ export default function TorrentClient() {
               <h2 className="text-xl font-bold text-white mb-4 flex items-center">
                 <Zap className="w-5 h-5 mr-2 text-emerald-400" />
                 Add Torrent
+                {boostMode.enabled && (
+                  <Badge className="ml-2 bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+                    <Zap className="w-2 h-2 mr-1" />
+                    BOOST
+                  </Badge>
+                )}
               </h2>
 
               <div className="mb-4">
                 <div className="flex gap-3">
-                  <Input
-                    type="text"
-                    placeholder="Paste magnet URL here..."
-                    value={magnetUrl}
-                    onChange={(e) => setMagnetUrl(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleMagnetSubmit(e);
-                      }
-                    }}
-                    className="bg-gray-800/90 border-gray-600 text-white placeholder-gray-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200"
-                    disabled={isTorrentLoading}
-                  />
+                  <div className="flex-1">
+                    <Input
+                      type="text"
+                      placeholder="Paste magnet URL here..."
+                      value={magnetUrl}
+                      onChange={(e) => setMagnetUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleMagnetSubmit(e);
+                        }
+                      }}
+                      className={`bg-gray-800/90 border-gray-600 text-white placeholder-gray-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 ${
+                        !magnetValidation.isValid && magnetUrl.trim()
+                          ? "border-red-500 focus:ring-red-500 focus:border-red-500"
+                          : ""
+                      }`}
+                      disabled={isTorrentLoading}
+                    />
+                    {!magnetValidation.isValid && magnetUrl.trim() && (
+                      <p className="text-red-400 text-xs mt-1 flex items-center">
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        {magnetValidation.error}
+                      </p>
+                    )}
+                    {magnetValidation.isValid && magnetUrl.trim() && (
+                      <p className="text-emerald-400 text-xs mt-1 flex items-center">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Valid magnet URL
+                      </p>
+                    )}
+                  </div>
                   <Button
                     onClick={handleMagnetSubmit}
-                    disabled={!magnetUrl.trim() || isTorrentLoading}
+                    disabled={
+                      !magnetUrl.trim() ||
+                      !magnetValidation.isValid ||
+                      isTorrentLoading
+                    }
                     className="bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 transition-all duration-200 min-w-[48px]"
                   >
                     {!isTorrentLoading && <Link className="w-4 h-4" />}
@@ -1046,8 +1314,11 @@ export default function TorrentClient() {
                 {isTorrentLoading && (
                   <p className="text-sm text-emerald-400 mt-3 animate-pulse flex items-center">
                     <Activity className="w-4 h-4 mr-2" />
-                    Connecting to swarm with {trackerStats.totalCount} external
-                    trackers...
+                    Connecting to swarm with{" "}
+                    {boostMode.enabled
+                      ? trackerStats.totalCount
+                      : trackerStats.safeCount}
+                    {boostMode.enabled ? " total" : " safe"} trackers...
                   </p>
                 )}
               </div>
@@ -1067,6 +1338,7 @@ export default function TorrentClient() {
 
                   <TrackerStatusDisplay
                     trackerInfo={selectedTorrent.trackerInfo}
+                    boostMode={selectedTorrent.boostMode || false}
                   />
                 </Card>
 
@@ -1134,6 +1406,12 @@ export default function TorrentClient() {
                                     ? "Paused"
                                     : "Downloading"}
                                 </Badge>
+                                {torrent.boostMode && (
+                                  <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+                                    <Zap className="w-2 h-2 mr-1" />
+                                    BOOST
+                                  </Badge>
+                                )}
                                 <div className="flex gap-1">
                                   {!torrent.done && !torrent.paused && (
                                     <Button
@@ -1233,6 +1511,12 @@ export default function TorrentClient() {
                                 ({torrent.trackerInfo.external.active}E +{" "}
                                 {torrent.trackerInfo.internal.active}I)
                               </div>
+                              {torrent.boostMode && (
+                                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/50 text-xs">
+                                  <Zap className="w-2 h-2 mr-1" />
+                                  BOOST
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1252,6 +1536,11 @@ export default function TorrentClient() {
                 onPauseTorrent={() => pauseTorrent(selectedTorrent)}
                 onResumeTorrent={() => resumeTorrent(selectedTorrent)}
                 onDeleteTorrent={() => deleteTorrent(selectedTorrent)}
+                onBoostTorrent={
+                  selectedTorrent.boostMode
+                    ? undefined
+                    : () => boostExistingTorrent(selectedTorrent)
+                }
                 formatBytes={formatBytes}
                 formatTime={formatTime}
               />
@@ -1265,6 +1554,12 @@ export default function TorrentClient() {
                   Add a torrent using a magnet URL or .torrent file to get
                   started with downloading
                 </p>
+                {boostMode.enabled && (
+                  <p className="text-orange-400 text-sm max-w-md mt-2">
+                    Boost mode is active - new torrents will use unsafe trackers
+                    for better peer discovery
+                  </p>
+                )}
               </Card>
             )}
           </div>
