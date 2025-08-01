@@ -1,13 +1,4 @@
-interface TrackerUrls {
-  https: string[];
-  wss: string[];
-}
-
-interface TrackerCache {
-  trackers: TrackerUrls;
-  lastFetched: number;
-  ttl: number; // Time to live in milliseconds
-}
+import { TrackerUrls, TrackerCache } from "@/types";
 
 class TrackerService {
   private static instance: TrackerService;

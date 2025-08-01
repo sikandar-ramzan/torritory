@@ -4,10 +4,7 @@ import type React from "react";
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, FileText } from "lucide-react";
-
-interface TorrentUploadProps {
-  onFileUpload: (file: File) => void;
-}
+import { TorrentUploadProps } from "@/types";
 
 export default function TorrentUpload({ onFileUpload }: TorrentUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);

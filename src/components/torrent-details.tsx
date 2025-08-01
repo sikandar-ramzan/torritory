@@ -10,7 +10,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Download,
   Upload,
-  Play,
   Users,
   Clock,
   FileVideo,
@@ -23,50 +22,20 @@ import {
   Globe,
   Copy,
   CheckCircle2,
+  Pause,
+  Play,
+  StopCircle,
+  Trash2,
 } from "lucide-react";
 import { useState } from "react";
-
-interface TorrentFile {
-  name: string;
-  length: number;
-  path: string;
-  progress: number;
-  downloaded: number;
-  type: "video" | "audio" | "image" | "document" | "other";
-  webTorrentFile?: any;
-}
-
-interface TorrentInfo {
-  name: string;
-  infoHash: string;
-  magnetURI: string;
-  length: number;
-  files: TorrentFile[];
-  progress: number;
-  downloadSpeed: number;
-  uploadSpeed: number;
-  downloaded: number;
-  uploaded: number;
-  numPeers: number;
-  timeRemaining: number;
-  ready: boolean;
-  done: boolean;
-  paused: boolean;
-  webTorrentInstance?: any;
-}
-
-interface TorrentDetailsProps {
-  torrent: TorrentInfo;
-  onPlayFile: (file: TorrentFile) => void;
-  onDownloadFile: (file: TorrentFile) => void;
-  formatBytes: (bytes: number) => string;
-  formatTime: (seconds: number) => string;
-}
+import { TorrentDetailsProps, TorrentFile } from "@/types";
 
 export default function TorrentDetails({
   torrent,
-  onPlayFile,
   onDownloadFile,
+  onPauseTorrent,
+  onResumeTorrent,
+  onDeleteTorrent,
   formatBytes,
   formatTime,
 }: TorrentDetailsProps) {
@@ -162,15 +131,27 @@ export default function TorrentDetails({
             </h2>
             <div className="flex items-center gap-3 flex-wrap">
               <Badge
-                variant={torrent.done ? "default" : "secondary"}
+                variant={
+                  torrent.done
+                    ? "default"
+                    : torrent.paused
+                    ? "secondary"
+                    : "default"
+                }
                 className={`font-semibold ${
                   torrent.done
                     ? "bg-emerald-600/80 text-white border-emerald-500"
+                    : torrent.paused
+                    ? "bg-yellow-600/80 text-white border-yellow-500"
                     : "bg-blue-600/80 text-white border-blue-500"
                 }`}
               >
                 <Activity className="w-3 h-3 mr-1" />
-                {torrent.done ? "Complete" : "Downloading"}
+                {torrent.done
+                  ? "Complete"
+                  : torrent.paused
+                  ? "Paused"
+                  : "Downloading"}
               </Badge>
               <Badge
                 variant="outline"
@@ -189,6 +170,28 @@ export default function TorrentDetails({
             </div>
           </div>
           <div className="flex gap-2 ml-4">
+            {!torrent.done && (
+              <>
+                {!torrent.paused ? (
+                  <Button
+                    onClick={onPauseTorrent}
+                    variant="outline"
+                    className="border-yellow-500/50 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all duration-200"
+                  >
+                    <Pause className="w-4 h-4 mr-2" />
+                    Pause
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={onResumeTorrent}
+                    className="bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Resume
+                  </Button>
+                )}
+              </>
+            )}
             {torrent.done && (
               <Button
                 onClick={downloadAllFiles}
@@ -198,6 +201,14 @@ export default function TorrentDetails({
                 Download All
               </Button>
             )}
+            <Button
+              onClick={onDeleteTorrent}
+              variant="outline"
+              className="border-red-500/50 text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
           </div>
         </div>
 
@@ -216,6 +227,8 @@ export default function TorrentDetails({
             className={`h-3 ${
               torrent.done
                 ? "[&>div]:bg-emerald-500"
+                : torrent.paused
+                ? "[&>div]:bg-yellow-500"
                 : torrent.progress > 0
                 ? "[&>div]:bg-blue-500 [&>div]:animate-pulse"
                 : "[&>div]:bg-gray-600"
@@ -268,7 +281,9 @@ export default function TorrentDetails({
               <div className="text-white font-bold text-lg">
                 {formatTime(torrent.timeRemaining || 0)}
               </div>
-              <div className="text-gray-400 text-sm font-medium">Remaining</div>
+              <div className="text-gray-400 text-sm font-medium">
+                {torrent.paused ? "Paused" : "Remaining"}
+              </div>
             </div>
           </div>
         </div>
@@ -369,29 +384,22 @@ export default function TorrentDetails({
                           </div>
 
                           <div className="flex gap-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {["video", "audio"].includes(file.type) &&
-                              (file.progress || 0) > 0.1 && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => onPlayFile(file)}
-                                  className="bg-blue-600/80 hover:bg-blue-600 text-white border-0 transition-all duration-200"
-                                >
-                                  <Play className="w-3 h-3 mr-1" />
-                                  Stream
-                                </Button>
-                              )}
-
-                            {(file.progress || 0) > 0 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => onDownloadFile(file)}
-                                className="border-emerald-500/50 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all duration-200"
-                              >
-                                <Download className="w-3 h-3 mr-1" />
-                                Save
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onDownloadFile(file)}
+                              disabled={(file.progress || 0) < 1}
+                              className={`transition-all duration-200 ${
+                                (file.progress || 0) >= 1
+                                  ? "border-emerald-500/50 text-emerald-400 hover:bg-emerald-500 hover:text-white"
+                                  : "border-gray-600 text-gray-500 cursor-not-allowed"
+                              }`}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              {(file.progress || 0) >= 1
+                                ? "Save"
+                                : "Downloading"}
+                            </Button>
                           </div>
                         </div>
                       ))}

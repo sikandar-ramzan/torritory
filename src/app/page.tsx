@@ -25,74 +25,25 @@ import {
   Signal,
   Wifi,
   WifiOff,
+  Pause,
+  Play,
+  Trash2,
 } from "lucide-react";
 import TorrentUpload from "@/components/torrent-upload";
 import TorrentDetails from "@/components/torrent-details";
-import MediaPlayer from "@/components/media-player";
 import TrackerService from "@/utils/trackerServcie";
+import {
+  TorrentFile,
+  TorrentInfo,
+  TrackerInfo,
+  SpeedLimits,
+  TrackerStats,
+} from "@/types";
 
 declare global {
   interface Window {
     WebTorrent: any;
   }
-}
-
-interface TorrentFile {
-  name: string;
-  length: number;
-  path: string;
-  progress: number;
-  downloaded: number;
-  type: "video" | "audio" | "image" | "document" | "other";
-  webTorrentFile?: any;
-}
-
-interface TrackerInfo {
-  external: {
-    total: number;
-    active: number;
-    trackers: string[];
-  };
-  internal: {
-    total: number;
-    active: number;
-    trackers: string[];
-  };
-  totalActive: number;
-  lastUpdated: Date;
-}
-
-interface TorrentInfo {
-  name: string;
-  infoHash: string;
-  magnetURI: string;
-  length: number;
-  files: TorrentFile[];
-  progress: number;
-  downloadSpeed: number;
-  uploadSpeed: number;
-  downloaded: number;
-  uploaded: number;
-  numPeers: number;
-  timeRemaining: number;
-  ready: boolean;
-  done: boolean;
-  paused: boolean;
-  webTorrentInstance?: any;
-  trackerInfo: TrackerInfo;
-}
-
-interface SpeedLimits {
-  download: number;
-  upload: number;
-}
-
-interface TrackerStats {
-  cached: boolean;
-  lastFetched: Date | null;
-  httpsCount: number;
-  wssCount: number;
-  totalCount: number;
 }
 
 // Tracker Status Component
@@ -180,7 +131,6 @@ export default function TorrentClient() {
   const [selectedTorrent, setSelectedTorrent] = useState<TorrentInfo | null>(
     null
   );
-  const [selectedFile, setSelectedFile] = useState<TorrentFile | null>(null);
   const [magnetUrl, setMagnetUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [webTorrentSupported, setWebTorrentSupported] = useState(false);
@@ -206,6 +156,15 @@ export default function TorrentClient() {
   const clientRef = useRef<any>(null);
   const updateIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const trackerService = useRef<TrackerService>(TrackerService.getInstance());
+
+  // Store original speed limits before applying pause throttling
+  const originalSpeedLimitsRef = useRef<
+    Map<string, { download: number; upload: number }>
+  >(new Map());
+
+  // Constants for pause throttling (very low speeds to simulate pause)
+  const PAUSE_THROTTLE_DOWNLOAD = 1; // 1 KB/s - extremely slow but not zero
+  const PAUSE_THROTTLE_UPLOAD = 1; // 1 KB/s
 
   // Initialize trackers on app load
   useEffect(() => {
@@ -316,6 +275,33 @@ export default function TorrentClient() {
     }
   };
 
+  // Apply individual torrent throttling for pause/resume functionality
+  const applyTorrentThrottling = (
+    torrent: any,
+    downloadKB: number,
+    uploadKB: number
+  ) => {
+    try {
+      const downloadBytes = downloadKB > 0 ? downloadKB * 1000 : -1;
+      const uploadBytes = uploadKB > 0 ? uploadKB * 1000 : -1;
+
+      // WebTorrent doesn't have per-torrent throttling, so we'll use the global client throttling
+      // This is a limitation, but it's the best we can do with the current WebTorrent API
+      if (clientRef.current.throttleDownload) {
+        clientRef.current.throttleDownload(downloadBytes);
+      }
+      if (clientRef.current.throttleUpload) {
+        clientRef.current.throttleUpload(uploadBytes);
+      }
+
+      console.log(
+        `Applied throttling to torrent ${torrent.name}: ${downloadKB}KB/s down, ${uploadKB}KB/s up`
+      );
+    } catch (error) {
+      console.error("Failed to apply torrent throttling:", error);
+    }
+  };
+
   const refreshTrackers = async () => {
     setIsRefreshingTrackers(true);
     try {
@@ -372,7 +358,7 @@ export default function TorrentClient() {
   };
 
   const calculateTimeRemaining = (torrent: any): number => {
-    if (!torrent || torrent.done) return 0;
+    if (!torrent || torrent.done || torrent.paused) return 0;
 
     const remainingBytes = torrent.length - torrent.downloaded;
     const downloadSpeed = torrent.downloadSpeed;
@@ -451,6 +437,139 @@ export default function TorrentClient() {
   const downloadAllFiles = (torrent: any) => {
     torrent.files.forEach((file: any) => {
       downloadFile(file, file.name);
+    });
+  };
+
+  const pauseTorrent = (torrent: TorrentInfo) => {
+    if (torrent.webTorrentInstance && !torrent.paused) {
+      const infoHash = torrent.infoHash;
+
+      // Store current speed limits before applying pause throttling
+      const currentDownload = speedLimits.download || 0;
+      const currentUpload = speedLimits.upload || 0;
+      originalSpeedLimitsRef.current.set(infoHash, {
+        download: currentDownload,
+        upload: currentUpload,
+      });
+
+      // Apply extreme throttling to simulate pause
+      applyTorrentThrottling(
+        torrent.webTorrentInstance,
+        PAUSE_THROTTLE_DOWNLOAD,
+        PAUSE_THROTTLE_UPLOAD
+      );
+
+      // Update torrent state to paused immediately
+      setTorrents((prev) =>
+        prev.map((t) => (t.infoHash === infoHash ? { ...t, paused: true } : t))
+      );
+
+      setSelectedTorrent((prev) =>
+        prev?.infoHash === infoHash ? { ...prev, paused: true } : prev
+      );
+
+      console.log(
+        `Torrent paused (throttled to ${PAUSE_THROTTLE_DOWNLOAD}KB/s):`,
+        torrent.name
+      );
+    }
+  };
+
+  const resumeTorrent = (torrent: TorrentInfo) => {
+    if (torrent.webTorrentInstance && torrent.paused) {
+      const infoHash = torrent.infoHash;
+
+      // Restore original speed limits or use global limits
+      const originalLimits = originalSpeedLimitsRef.current.get(infoHash);
+      const downloadLimit =
+        originalLimits?.download || speedLimits.download || 0;
+      const uploadLimit = originalLimits?.upload || speedLimits.upload || 0;
+
+      // Apply restored speed limits (0 means unlimited)
+      applyTorrentThrottling(
+        torrent.webTorrentInstance,
+        downloadLimit,
+        uploadLimit
+      );
+
+      // Clean up stored original limits
+      originalSpeedLimitsRef.current.delete(infoHash);
+
+      // Update torrent state to resumed immediately
+      setTorrents((prev) =>
+        prev.map((t) => (t.infoHash === infoHash ? { ...t, paused: false } : t))
+      );
+
+      setSelectedTorrent((prev) =>
+        prev?.infoHash === infoHash ? { ...prev, paused: false } : prev
+      );
+
+      console.log(
+        `Torrent resumed (restored to ${downloadLimit || "unlimited"}KB/s):`,
+        torrent.name
+      );
+    }
+  };
+
+  const deleteTorrent = (torrent: TorrentInfo) => {
+    if (torrent.webTorrentInstance) {
+      // Clean up original speed limits tracking
+      originalSpeedLimitsRef.current.delete(torrent.infoHash);
+
+      // Remove torrent from WebTorrent client
+      clientRef.current.remove(torrent.webTorrentInstance);
+
+      // Clear update interval
+      const interval = updateIntervalsRef.current.get(torrent.infoHash);
+      if (interval) {
+        clearInterval(interval);
+        updateIntervalsRef.current.delete(torrent.infoHash);
+      }
+
+      // Remove from state
+      setTorrents((prev) =>
+        prev.filter((t) => t.infoHash !== torrent.infoHash)
+      );
+
+      // Clear selection if this torrent was selected
+      if (selectedTorrent?.infoHash === torrent.infoHash) {
+        setSelectedTorrent(null);
+      }
+
+      // Remove from completed set
+      setCompletedTorrents((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(torrent.infoHash);
+        return newSet;
+      });
+
+      // Restore global speed limits if no other torrents are paused
+      const remainingTorrents = torrents.filter(
+        (t) => t.infoHash !== torrent.infoHash
+      );
+      const hasActivePausedTorrents = remainingTorrents.some((t) => t.paused);
+
+      if (!hasActivePausedTorrents) {
+        applySpeedLimits(); // Restore global limits
+      }
+
+      console.log("Torrent deleted:", torrent.name);
+    }
+  };
+
+  const updateTorrentState = (
+    infoHash: string,
+    updates: Partial<TorrentInfo>
+  ) => {
+    setTorrents((prev) =>
+      prev.map((t) => (t.infoHash === infoHash ? { ...t, ...updates } : t))
+    );
+
+    setSelectedTorrent((prevSelected) => {
+      if (prevSelected?.infoHash === infoHash) {
+        return { ...prevSelected, ...updates };
+      }
+      return prevSelected;
     });
   };
 
@@ -562,34 +681,65 @@ export default function TorrentClient() {
             additionalTrackers
           );
 
-          const updatedInfo: TorrentInfo = {
-            ...torrentInfo,
-            progress: torrent.progress || 0,
-            downloadSpeed: torrent.done ? 0 : currentSpeed,
-            uploadSpeed: torrent.uploadSpeed || 0,
-            downloaded: torrent.downloaded || 0,
-            uploaded: torrent.uploaded || 0,
-            numPeers: torrent.numPeers || 0,
-            timeRemaining: timeRemaining,
-            ready: torrent.ready || false,
-            done: torrent.done || false,
-            trackerInfo: updatedTrackerInfo,
-            files: torrent.files.map((file: any, index: number) => ({
-              ...torrentInfo.files[index],
-              progress: file.progress || 0,
-              downloaded: file.downloaded || 0,
-              webTorrentFile: file,
-            })),
-            webTorrentInstance: torrent,
-          };
+          setTorrents((prev) => {
+            const currentTorrent = prev.find(
+              (t) => t.infoHash === torrent.infoHash
+            );
+            if (!currentTorrent) return prev;
 
-          setTorrents((prev) =>
-            prev.map((t) => (t.infoHash === torrent.infoHash ? updatedInfo : t))
-          );
+            const updatedInfo: TorrentInfo = {
+              ...currentTorrent,
+              progress: torrent.progress || 0,
+              downloadSpeed: torrent.done ? 0 : currentSpeed,
+              uploadSpeed: torrent.uploadSpeed || 0,
+              downloaded: torrent.downloaded || 0,
+              uploaded: torrent.uploaded || 0,
+              numPeers: torrent.numPeers || 0,
+              timeRemaining: currentTorrent.paused
+                ? Number.POSITIVE_INFINITY
+                : timeRemaining,
+              ready: torrent.ready || false,
+              done: torrent.done || false,
+              // Keep the current paused state from our state management
+              paused: currentTorrent.paused,
+              trackerInfo: updatedTrackerInfo,
+              files: torrent.files.map((file: any, index: number) => ({
+                ...currentTorrent.files[index],
+                progress: file.progress || 0,
+                downloaded: file.downloaded || 0,
+                webTorrentFile: file,
+              })),
+              webTorrentInstance: torrent,
+            };
+
+            return prev.map((t) =>
+              t.infoHash === torrent.infoHash ? updatedInfo : t
+            );
+          });
 
           setSelectedTorrent((prevSelected) => {
             if (prevSelected?.infoHash === torrent.infoHash) {
-              return updatedInfo;
+              return {
+                ...prevSelected,
+                progress: torrent.progress || 0,
+                downloadSpeed: torrent.done ? 0 : currentSpeed,
+                uploadSpeed: torrent.uploadSpeed || 0,
+                downloaded: torrent.downloaded || 0,
+                uploaded: torrent.uploaded || 0,
+                numPeers: torrent.numPeers || 0,
+                timeRemaining: prevSelected.paused
+                  ? Number.POSITIVE_INFINITY
+                  : timeRemaining,
+                ready: torrent.ready || false,
+                done: torrent.done || false,
+                trackerInfo: updatedTrackerInfo,
+                files: torrent.files.map((file: any, index: number) => ({
+                  ...prevSelected.files[index],
+                  progress: file.progress || 0,
+                  downloaded: file.downloaded || 0,
+                  webTorrentFile: file,
+                })),
+              };
             }
             return prevSelected;
           });
@@ -659,21 +809,9 @@ export default function TorrentClient() {
     addTorrent(file);
   };
 
-  const playFile = (file: TorrentFile) => {
-    if (["video", "audio"].includes(file.type)) {
-      setSelectedFile(file);
-    }
-  };
-
   const handleDownloadFile = (file: TorrentFile) => {
     if (file.webTorrentFile) {
       downloadFile(file.webTorrentFile, file.name);
-    }
-  };
-
-  const handleDownloadAll = (torrent: TorrentInfo) => {
-    if (torrent.webTorrentInstance) {
-      downloadAllFiles(torrent.webTorrentInstance);
     }
   };
 
@@ -689,7 +827,20 @@ export default function TorrentClient() {
   };
 
   const applySpeedLimitSettings = () => {
+    // Update speed limits and apply to all non-paused torrents
     applySpeedLimits();
+
+    // Re-apply pause throttling to any currently paused torrents
+    torrents.forEach((torrent) => {
+      if (torrent.paused && torrent.webTorrentInstance) {
+        applyTorrentThrottling(
+          torrent.webTorrentInstance,
+          PAUSE_THROTTLE_DOWNLOAD,
+          PAUSE_THROTTLE_UPLOAD
+        );
+      }
+    });
+
     setShowSpeedSettings(false);
   };
 
@@ -717,8 +868,8 @@ export default function TorrentClient() {
           </h2>
           <p className="text-gray-300">
             Your browser doesn&apos;t support WebRTC, which is required for
-            WebTorrent. Please use a modern browser like Chrome, Firefox, or
-            Safari.
+            peer-to-peer connections in WebTorrent. Please use a modern browser
+            like Chrome, Firefox, or Safari.
           </p>
         </Card>
       </div>
@@ -819,6 +970,14 @@ export default function TorrentClient() {
                 >
                   Cancel
                 </Button>
+              </div>
+              <div className="mt-3 p-3 bg-blue-900/20 rounded-lg border border-blue-500/30">
+                <p className="text-sm text-blue-300">
+                  <strong>Note:</strong> Pause functionality uses throttling (
+                  {PAUSE_THROTTLE_DOWNLOAD}KB/s) instead of true pausing due to
+                  WebTorrent limitations. This maintains peer connections while
+                  virtually stopping downloads.
+                </p>
               </div>
             </div>
           )}
@@ -955,29 +1114,65 @@ export default function TorrentClient() {
                               <div className="flex gap-2 flex-shrink-0">
                                 <Badge
                                   variant={
-                                    torrent.done ? "default" : "secondary"
+                                    torrent.done
+                                      ? "default"
+                                      : torrent.paused
+                                      ? "secondary"
+                                      : "default"
                                   }
                                   className={`text-xs font-medium ${
                                     torrent.done
                                       ? "bg-emerald-600/80 text-white border-emerald-500"
+                                      : torrent.paused
+                                      ? "bg-yellow-600/80 text-white border-yellow-500"
                                       : "bg-blue-600/80 text-white border-blue-500"
                                   }`}
                                 >
-                                  {torrent.done ? "Complete" : "Downloading"}
+                                  {torrent.done
+                                    ? "Complete"
+                                    : torrent.paused
+                                    ? "Paused"
+                                    : "Downloading"}
                                 </Badge>
-                                {torrent.done && (
+                                <div className="flex gap-1">
+                                  {!torrent.done && !torrent.paused && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        pauseTorrent(torrent);
+                                      }}
+                                      className="h-6 px-2 text-xs border-yellow-500 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all duration-200"
+                                    >
+                                      <Pause className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                  {!torrent.done && torrent.paused && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        resumeTorrent(torrent);
+                                      }}
+                                      className="h-6 px-2 text-xs border-blue-500 text-blue-400 hover:bg-blue-500 hover:text-white transition-all duration-200"
+                                    >
+                                      <Play className="w-3 h-3" />
+                                    </Button>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDownloadAll(torrent);
+                                      deleteTorrent(torrent);
                                     }}
-                                    className="h-6 px-2 text-xs border-emerald-500 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all duration-200"
+                                    className="h-6 px-2 text-xs border-red-500 text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200"
                                   >
-                                    <Download className="w-3 h-3" />
+                                    <Trash2 className="w-3 h-3" />
                                   </Button>
-                                )}
+                                </div>
                               </div>
                             </div>
 
@@ -986,6 +1181,8 @@ export default function TorrentClient() {
                               className={`h-2 mb-2 ${
                                 torrent.done
                                   ? "[&>div]:bg-emerald-500"
+                                  : torrent.paused
+                                  ? "[&>div]:bg-yellow-500"
                                   : torrent.progress > 0
                                   ? "[&>div]:bg-blue-500 [&>div]:animate-pulse"
                                   : "[&>div]:bg-gray-600"
@@ -999,7 +1196,11 @@ export default function TorrentClient() {
                                 </span>
                                 <span className="flex items-center">
                                   <Download className="w-3 h-3 mr-1" />
-                                  {formatBytes(torrent.downloadSpeed)}/s
+                                  {torrent.paused
+                                    ? `~${formatBytes(
+                                        PAUSE_THROTTLE_DOWNLOAD * 1000
+                                      )}/s`
+                                    : `${formatBytes(torrent.downloadSpeed)}/s`}
                                 </span>
                                 <span className="flex items-center">
                                   <Users className="w-3 h-3 mr-1" />
@@ -1007,7 +1208,9 @@ export default function TorrentClient() {
                                 </span>
                               </div>
                               <span className="text-gray-500 font-medium">
-                                {formatTime(torrent.timeRemaining)}
+                                {torrent.paused
+                                  ? "Paused"
+                                  : formatTime(torrent.timeRemaining)}
                               </span>
                             </div>
 
@@ -1045,8 +1248,10 @@ export default function TorrentClient() {
             {selectedTorrent ? (
               <TorrentDetails
                 torrent={selectedTorrent}
-                onPlayFile={playFile}
                 onDownloadFile={handleDownloadFile}
+                onPauseTorrent={() => pauseTorrent(selectedTorrent)}
+                onResumeTorrent={() => resumeTorrent(selectedTorrent)}
+                onDeleteTorrent={() => deleteTorrent(selectedTorrent)}
                 formatBytes={formatBytes}
                 formatTime={formatTime}
               />
@@ -1058,20 +1263,12 @@ export default function TorrentClient() {
                 </h2>
                 <p className="text-gray-400 text-lg max-w-md">
                   Add a torrent using a magnet URL or .torrent file to get
-                  started with downloading and streaming
+                  started with downloading
                 </p>
               </Card>
             )}
           </div>
         </div>
-
-        {selectedFile && selectedTorrent && (
-          <MediaPlayer
-            file={selectedFile}
-            torrent={selectedTorrent}
-            onClose={() => setSelectedFile(null)}
-          />
-        )}
       </div>
     </div>
   );
